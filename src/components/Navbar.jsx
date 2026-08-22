@@ -1,7 +1,7 @@
 'use client';
 
 import { motion, useScroll, useTransform } from 'framer-motion';
-import { GraduationCap, FolderKanban, Menu, X, Sparkles } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { useState } from 'react';
 
 const links = [
@@ -25,9 +25,11 @@ export default function Navbar() {
     >
       <nav className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         <a href="#home" className="flex items-center gap-2.5 group">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-violet-600 flex items-center justify-center shadow-lg shadow-brand-600/30 group-hover:scale-110 transition-transform">
-            <Sparkles className="w-5 h-5 text-white" />
-          </div>
+          <img
+            src="/logo.svg"
+            alt="Arkasodhara"
+            className="w-9 h-9 drop-shadow-lg shadow-brand-600/30 group-hover:scale-110 transition-transform"
+          />
           <span className="text-lg font-bold tracking-tight text-white">
             Arkasodhara
           </span>

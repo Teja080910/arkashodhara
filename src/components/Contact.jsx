@@ -35,8 +35,8 @@ export default function Contact() {
 
             <div className="mt-10 space-y-5">
               {[
-                { icon: Mail, label: 'Email', value: 'hello@arkasodhara.tech' },
-                { icon: Phone, label: 'Phone', value: '+91 98765 43210' },
+                { icon: Mail, label: 'Email', value: 'tejasimma36@gmail.com' },
+                { icon: Phone, label: 'Phone', value: '+91 6300291529' },
                 { icon: MapPin, label: 'Location', value: 'Hyderabad, India' },
               ].map((c, i) => (
                 <motion.div
