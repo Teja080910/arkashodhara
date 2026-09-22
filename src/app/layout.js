@@ -4,8 +4,8 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
-  title: 'Arkasodhara — Classes & Project Management',
-  description: 'Learn, build and manage your projects with Arkasodhara. Expert-led classes and a powerful project management platform.',
+  title: 'Arkasodhara — Software Development & Tech Classes',
+  description: 'Arkasodhara is a software development team and tech academy. We build web, mobile and AI products for clients — and teach students the craft through hands-on classes.',
 };
 
 export default function RootLayout({ children }) {

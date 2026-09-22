@@ -1,45 +1,45 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { FolderKanban, ListTodo, Users, BarChart3, GitBranch, CalendarCheck, ArrowRight } from 'lucide-react';
+import { FolderKanban, CalendarCheck, BarChart3, ArrowRight, Code2, Smartphone, Palette, Server, Rocket, Bot } from 'lucide-react';
 
-const features = [
+const services = [
   {
-    icon: FolderKanban,
-    title: 'Project Boards',
-    desc: 'Kanban-style boards to organize tasks, track progress and keep every project on schedule.',
+    icon: Code2,
+    title: 'Web App Development',
+    desc: 'Marketing sites, dashboards and SaaS platforms built with React, Next.js and Node.',
   },
   {
-    icon: ListTodo,
-    title: 'Task Management',
-    desc: 'Break projects into tasks, assign owners, set deadlines and never miss a milestone.',
+    icon: Smartphone,
+    title: 'Mobile Apps',
+    desc: 'Cross-platform iOS and Android apps with React Native and Flutter.',
   },
   {
-    icon: Users,
-    title: 'Team Collaboration',
-    desc: 'Invite teammates, share progress and collaborate in real time with comments and mentions.',
+    icon: Palette,
+    title: 'UI / UX Design',
+    desc: 'User research, wireframes and polished interfaces your users will love.',
   },
   {
-    icon: BarChart3,
-    title: 'Progress Analytics',
-    desc: 'Visual dashboards showing velocity, completion rates and where your team stands.',
+    icon: Server,
+    title: 'Backend & APIs',
+    desc: 'Scalable APIs, databases, authentication and third-party integrations.',
   },
   {
-    icon: GitBranch,
-    title: 'Milestones & Versions',
-    desc: 'Plan releases with milestones and keep a clean history of every project version.',
+    icon: Rocket,
+    title: 'DevOps & Deployment',
+    desc: 'Cloud setup, CI/CD pipelines and monitoring so your product stays fast and online.',
   },
   {
-    icon: CalendarCheck,
-    title: 'Deadline Tracking',
-    desc: 'Smart reminders and calendar views so nothing slips through the cracks.',
+    icon: Bot,
+    title: 'AI & Automation',
+    desc: 'AI integrations, chatbots and workflow automation that save your team hours.',
   },
 ];
 
 const steps = [
-  { num: '01', title: 'Create a project', desc: 'Set up a workspace and invite your team in seconds.' },
-  { num: '02', title: 'Plan & assign', desc: 'Break work into tasks, set priorities and assign owners.' },
-  { num: '03', title: 'Track & ship', desc: 'Watch progress live, hit milestones and deliver on time.' },
+  { num: '01', title: 'Tell us your idea', desc: 'Share your goals — we map out the scope, timeline and cost.' },
+  { num: '02', title: 'We design & build', desc: 'Our team designs, develops and keeps you updated with regular demos.' },
+  { num: '03', title: 'Launch & support', desc: 'We ship your product, monitor it and support you as you grow.' },
 ];
 
 export default function Projects() {
@@ -56,18 +56,18 @@ export default function Projects() {
             transition={{ duration: 0.7 }}
           >
             <span className="text-violet-400 text-sm font-semibold tracking-widest uppercase">
-              Project Management
+              For Clients
             </span>
             <h2 className="mt-3 text-4xl md:text-5xl font-bold text-white tracking-tight leading-tight">
-              Manage every project from{' '}
+              We turn your idea into a{' '}
               <span className="bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">
-                idea to launch
+                product people use
               </span>
             </h2>
             <p className="mt-5 text-slate-400 text-lg leading-relaxed">
-              Whether it&apos;s a class assignment, a client project or your own
-              startup — Arkasodhara gives you the tools to plan, collaborate and
-              ship with confidence.
+              Arkasodhara is a hands-on product team. Startups and businesses
+              partner with us to design, develop and launch web apps, mobile
+              apps and AI tools — on time and built to scale.
             </p>
 
             <div className="mt-10 space-y-6">
@@ -99,7 +99,7 @@ export default function Projects() {
               href="#contact"
               className="mt-10 inline-flex items-center gap-2 px-7 py-3.5 rounded-full font-semibold text-white bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:shadow-xl hover:shadow-violet-600/40 hover:-translate-y-0.5 transition-all"
             >
-              Start Managing Projects
+              Start Your Project
               <ArrowRight className="w-4 h-4" />
             </motion.a>
           </motion.div>
@@ -119,7 +119,7 @@ export default function Projects() {
                   </div>
                   <div>
                     <div className="text-white text-sm font-semibold">E-Commerce Platform</div>
-                    <div className="text-slate-500 text-xs">Sprint 4 · 12 tasks</div>
+                    <div className="text-slate-500 text-xs">Client project · Sprint 4 · 12 tasks</div>
                   </div>
                 </div>
                 <span className="px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-400 text-xs font-medium">
@@ -129,9 +129,9 @@ export default function Projects() {
 
               <div className="grid grid-cols-3 gap-3 mb-6">
                 {[
-                  { title: 'To Do', count: 3, color: 'bg-slate-500' },
-                  { title: 'In Progress', count: 4, color: 'bg-amber-500' },
-                  { title: 'Done', count: 5, color: 'bg-emerald-500' },
+                  { title: 'Backlog', count: 3, color: 'bg-slate-500' },
+                  { title: 'In Development', count: 4, color: 'bg-amber-500' },
+                  { title: 'Shipped', count: 5, color: 'bg-emerald-500' },
                 ].map((col) => (
                   <div key={col.title} className="rounded-2xl bg-ink-800/70 border border-white/5 p-3">
                     <div className="flex items-center gap-2 mb-3">
@@ -167,11 +167,11 @@ export default function Projects() {
                       </div>
                     ))}
                   </div>
-                  <span>4 collaborators</span>
+                  <span>Our delivery team</span>
                 </div>
                 <span className="flex items-center gap-1.5">
                   <CalendarCheck className="w-3.5 h-3.5 text-violet-400" />
-                  Due in 5 days
+                  Launch in 5 days
                 </span>
               </div>
             </div>
@@ -188,13 +188,28 @@ export default function Projects() {
                   <BarChart3 className="w-4.5 h-4.5 text-white" />
                 </div>
                 <div>
-                  <div className="text-white text-sm font-semibold">+32% velocity</div>
-                  <div className="text-slate-500 text-xs">This sprint vs last</div>
+                  <div className="text-white text-sm font-semibold">Delivered on time</div>
+                  <div className="text-slate-500 text-xs">120+ client projects shipped</div>
                 </div>
               </div>
             </motion.div>
           </motion.div>
         </div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-100px' }}
+          transition={{ duration: 0.6 }}
+          className="text-center max-w-2xl mx-auto mb-14"
+        >
+          <span className="text-violet-400 text-sm font-semibold tracking-widest uppercase">
+            Services
+          </span>
+          <h3 className="mt-3 text-3xl md:text-4xl font-bold text-white tracking-tight">
+            What our clients hire us for
+          </h3>
+        </motion.div>
 
         <motion.div
           initial={{ opacity: 0, y: 30 }}
@@ -203,17 +218,17 @@ export default function Projects() {
           transition={{ duration: 0.7 }}
           className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6"
         >
-          {features.map((f) => (
+          {services.map((s) => (
             <motion.div
-              key={f.title}
+              key={s.title}
               whileHover={{ y: -6 }}
               className="group rounded-3xl border border-white/10 bg-white/5 p-7 hover:border-violet-500/40 transition-colors"
             >
               <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 border border-violet-500/20 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <f.icon className="w-5.5 h-5.5 text-violet-400" />
+                <s.icon className="w-5.5 h-5.5 text-violet-400" />
               </div>
-              <h3 className="text-lg font-semibold text-white mb-2">{f.title}</h3>
-              <p className="text-sm text-slate-400 leading-relaxed">{f.desc}</p>
+              <h3 className="text-lg font-semibold text-white mb-2">{s.title}</h3>
+              <p className="text-sm text-slate-400 leading-relaxed">{s.desc}</p>
             </motion.div>
           ))}
         </motion.div>

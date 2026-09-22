@@ -2,6 +2,7 @@ import Navbar from '@/components/Navbar';
 import Hero from '@/components/Hero';
 import Classes from '@/components/Classes';
 import Projects from '@/components/Projects';
+import TeamPlatform from '@/components/TeamPlatform';
 import Testimonials from '@/components/Testimonials';
 import Contact from '@/components/Contact';
 import Footer from '@/components/Footer';
@@ -13,6 +14,7 @@ export default function Home() {
       <Hero />
       <Classes />
       <Projects />
+      <TeamPlatform />
       <Testimonials />
       <Contact />
       <Footer />

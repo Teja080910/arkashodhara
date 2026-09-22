@@ -7,8 +7,8 @@ import { useState } from 'react';
 const links = [
   { label: 'Home', href: '#home' },
   { label: 'Classes', href: '#classes' },
-  { label: 'Projects', href: '#projects' },
-  { label: 'Features', href: '#features' },
+  { label: 'Our Work', href: '#projects' },
+  { label: 'Platform', href: '#platform' },
   { label: 'Contact', href: '#contact' },
 ];
 
@@ -28,7 +28,7 @@ export default function Navbar() {
           <img
             src="/logo.svg"
             alt="Arkasodhara"
-            className="w-9 h-9 drop-shadow-lg shadow-brand-600/30 group-hover:scale-110 transition-transform"
+            className="h-10 w-10 drop-shadow-lg shadow-brand-600/30 group-hover:scale-105 transition-transform"
           />
           <span className="text-lg font-bold tracking-tight text-white">
             Arkasodhara
@@ -50,7 +50,7 @@ export default function Navbar() {
             href="#contact"
             className="px-5 py-2 rounded-full text-sm font-semibold text-white bg-gradient-to-r from-brand-600 to-violet-600 hover:shadow-lg hover:shadow-brand-600/40 hover:-translate-y-0.5 transition-all"
           >
-            Get Started
+            Work With Us
           </a>
         </div>
 
@@ -84,7 +84,7 @@ export default function Navbar() {
             onClick={() => setOpen(false)}
             className="px-5 py-2.5 rounded-full text-center text-sm font-semibold text-white bg-gradient-to-r from-brand-600 to-violet-600"
           >
-            Get Started
+            Work With Us
           </a>
         </motion.div>
       )}

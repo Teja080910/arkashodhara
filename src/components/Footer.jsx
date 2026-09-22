@@ -1,7 +1,6 @@
 'use client';
 
-import { motion } from 'framer-motion';
-import { GraduationCap, FolderKanban, Sparkles, Heart } from 'lucide-react';
+import { Heart } from 'lucide-react';
 
 export default function Footer() {
   return (
@@ -10,14 +9,13 @@ export default function Footer() {
         <div className="grid md:grid-cols-4 gap-10">
           <div className="md:col-span-2">
             <a href="#home" className="flex items-center gap-2.5 mb-4">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-violet-600 flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-white" />
-              </div>
+              <img src="/logo.svg" alt="Arkasodhara" className="h-10 w-auto" />
               <span className="text-lg font-bold text-white">Arkasodhara</span>
             </a>
             <p className="text-slate-500 text-sm leading-relaxed max-w-sm">
-              Learn new skills, build real projects and manage everything in one
-              place. Classes and project management, together.
+              A software team and academy in one. We build web, mobile and AI
+              products for clients — and teach students the craft through
+              hands-on classes.
             </p>
           </div>
 
@@ -35,8 +33,9 @@ export default function Footer() {
             <h4 className="text-white font-semibold text-sm mb-4">Company</h4>
             <ul className="space-y-2.5 text-sm text-slate-500">
               <li><a href="#home" className="hover:text-brand-400 transition-colors">Home</a></li>
-              <li><a href="#projects" className="hover:text-brand-400 transition-colors">Projects</a></li>
-              <li><a href="#features" className="hover:text-brand-400 transition-colors">Features</a></li>
+              <li><a href="#projects" className="hover:text-brand-400 transition-colors">Our Work</a></li>
+              <li><a href="#platform" className="hover:text-brand-400 transition-colors">Platform</a></li>
+              <li><a href="#classes" className="hover:text-brand-400 transition-colors">Classes</a></li>
               <li><a href="#contact" className="hover:text-brand-400 transition-colors">Contact</a></li>
             </ul>
           </div>
@@ -47,7 +46,7 @@ export default function Footer() {
             © {new Date().getFullYear()} Arkasodhara. All rights reserved.
           </p>
           <p className="text-xs text-slate-600 flex items-center gap-1.5">
-            Made with <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" /> for learners & builders
+            Made with <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" /> for clients & learners
           </p>
         </div>
       </div>

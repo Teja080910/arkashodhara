@@ -6,25 +6,25 @@ import { Quote, Star } from 'lucide-react';
 const testimonials = [
   {
     name: 'Sai Kiran',
-    role: 'Full-Stack Developer @ Startup',
+    role: 'Founder, Retail Startup',
     quote:
-      'The classes at Arkasodhara changed how I learn. Real projects, real feedback — I landed my first dev job within 6 months.',
+      'Arkasodhara built our entire e-commerce platform from scratch — on time, on budget and better than we imagined. They felt like our own in-house team.',
     initials: 'SK',
     color: 'from-brand-500 to-indigo-600',
   },
   {
     name: 'Ananya Reddy',
-    role: 'UI/UX Designer',
+    role: 'Full-Stack Developer (Student)',
     quote:
-      'The project management tools kept me organized while juggling classes and freelance work. Everything in one place.',
+      'I joined the web development class with zero coding experience. Six months later I landed my first developer job — the mentors guided me at every step.',
     initials: 'AR',
     color: 'from-violet-500 to-fuchsia-600',
   },
   {
     name: 'Rahul Verma',
-    role: 'CS Student',
+    role: 'Product Manager, FinTech',
     quote:
-      'From my first HTML page to deploying full-stack apps — the mentors guide you at every step. Best decision I made.',
+      'From the first call to launch, communication was clear and the code quality was excellent. Our app now serves thousands of users every day.',
     initials: 'RV',
     color: 'from-emerald-500 to-teal-600',
   },
@@ -47,9 +47,9 @@ export default function Testimonials() {
             Testimonials
           </span>
           <h2 className="mt-3 text-4xl md:text-5xl font-bold text-white tracking-tight">
-            Loved by students{' '}
+            Loved by clients{' '}
             <span className="bg-gradient-to-r from-brand-400 to-violet-400 bg-clip-text text-transparent">
-              & teams
+              & students
             </span>
           </h2>
         </motion.div>

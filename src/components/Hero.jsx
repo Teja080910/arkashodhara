@@ -1,13 +1,13 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { GraduationCap, FolderKanban, ArrowRight, PlayCircle, CheckCircle2, Sparkles } from 'lucide-react';
+import { GraduationCap, FolderKanban, ArrowRight, CheckCircle2, Sparkles } from 'lucide-react';
 
 const stats = [
-  { value: '500+', label: 'Students Taught' },
-  { value: '120+', label: 'Projects Built' },
-  { value: '15+', label: 'Expert Mentors' },
-  { value: '98%', label: 'Success Rate' },
+  { value: '120+', label: 'Projects Delivered' },
+  { value: '500+', label: 'Students Trained' },
+  { value: '40+', label: 'Happy Clients' },
+  { value: '98%', label: 'On-Time Delivery' },
 ];
 
 const fadeUp = {
@@ -36,7 +36,7 @@ export default function Hero() {
             className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-brand-500/30 bg-brand-500/10 text-brand-300 text-xs font-medium mb-6"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            Learn. Build. Manage. Grow.
+            Build with us. Learn with us.
           </motion.div>
 
           <motion.h1
@@ -46,12 +46,12 @@ export default function Hero() {
             custom={1}
             className="text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight text-white leading-[1.05]"
           >
-            Master Skills.{' '}
+            Turn Your Idea Into{' '}
             <span className="bg-gradient-to-r from-brand-400 via-violet-400 to-fuchsia-400 bg-clip-text text-transparent animate-gradient-x bg-[length:200%_auto]">
-              Build Projects.
+              a Real Product.
             </span>{' '}
             <br />
-            Manage Everything.
+            Or Learn to Build One.
           </motion.h1>
 
           <motion.p
@@ -61,9 +61,10 @@ export default function Hero() {
             custom={2}
             className="mt-6 text-lg text-slate-400 max-w-xl leading-relaxed"
           >
-            Arkasodhara brings expert-led classes and a powerful project management
-            platform together — so you can learn new skills, ship real projects,
-            and track every milestone in one place.
+            Arkasodhara is a software team and academy in one. Clients partner
+            with us to design, build and launch web, mobile and AI products —
+            while students learn the same craft through hands-on, mentor-led
+            classes.
           </motion.p>
 
           <motion.div
@@ -74,18 +75,18 @@ export default function Hero() {
             className="mt-8 flex flex-wrap items-center gap-4"
           >
             <a
-              href="#classes"
+              href="#projects"
               className="group inline-flex items-center gap-2 px-7 py-3.5 rounded-full font-semibold text-white bg-gradient-to-r from-brand-600 to-violet-600 hover:shadow-xl hover:shadow-brand-600/40 hover:-translate-y-0.5 transition-all"
             >
-              Explore Classes
+              Start a Project
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </a>
             <a
-              href="#projects"
+              href="#classes"
               className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full font-semibold text-slate-200 border border-white/15 hover:border-brand-400/50 hover:bg-white/5 transition-all"
             >
-              <PlayCircle className="w-5 h-5 text-brand-400" />
-              View Projects
+              <GraduationCap className="w-5 h-5 text-brand-400" />
+              Join a Class
             </a>
           </motion.div>
 
@@ -151,7 +152,7 @@ export default function Hero() {
             <div className="rounded-2xl bg-ink-900/60 border border-white/10 p-4">
               <div className="flex items-center gap-2 text-xs text-slate-400 mb-3">
                 <FolderKanban className="w-4 h-4 text-violet-400" />
-                Project: E-Commerce Platform
+                Client Project: E-Commerce Platform
               </div>
               <div className="flex items-center gap-2">
                 {['Design', 'Frontend', 'Backend', 'Deploy'].map((t, i) => (
@@ -183,8 +184,8 @@ export default function Hero() {
                 A
               </div>
               <div>
-                <div className="text-white text-sm font-semibold">Milestone reached</div>
-                <div className="text-slate-500 text-xs">Project submitted for review</div>
+                <div className="text-white text-sm font-semibold">Delivered on time</div>
+                <div className="text-slate-500 text-xs">Client project shipped</div>
               </div>
             </div>
           </motion.div>

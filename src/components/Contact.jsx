@@ -25,19 +25,19 @@ export default function Contact() {
             <h2 className="mt-3 text-4xl md:text-5xl font-bold text-white tracking-tight">
               Ready to start your{' '}
               <span className="bg-gradient-to-r from-brand-400 to-violet-400 bg-clip-text text-transparent">
-                journey?
+                project or class?
               </span>
             </h2>
             <p className="mt-5 text-slate-400 text-lg leading-relaxed">
-              Join a class, manage your projects, or just say hello. We&apos;d
-              love to hear from you.
+              Whether you need a product built or a new skill learned, tell us
+              what you need — we usually reply within a day.
             </p>
 
             <div className="mt-10 space-y-5">
               {[
                 { icon: Mail, label: 'Email', value: 'tejasimma36@gmail.com' },
                 { icon: Phone, label: 'Phone', value: '+91 6300291529' },
-                { icon: MapPin, label: 'Location', value: 'Hyderabad, India' },
+                { icon: MapPin, label: 'Location', value: 'Bengaluru, India' },
               ].map((c, i) => (
                 <motion.div
                   key={c.label}
@@ -96,8 +96,8 @@ export default function Contact() {
               <div>
                 <label className="block text-sm text-slate-400 mb-2">I&apos;m interested in</label>
                 <select className="w-full px-4 py-3 rounded-xl bg-ink-800/70 border border-white/10 text-white focus:outline-none focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 transition-all">
+                  <option>Hiring us for a project</option>
                   <option>Joining a class</option>
-                  <option>Project management</option>
                   <option>Both</option>
                   <option>Something else</option>
                 </select>
