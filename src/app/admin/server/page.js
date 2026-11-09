@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Server, RefreshCw, LogOut, Cpu, HardDrive, MemoryStick, Boxes } from 'lucide-react';
+import { Server, RefreshCw, LogOut, Cpu, HardDrive, MemoryStick, Boxes, ChevronDown } from 'lucide-react';
 
 const numberFormat = new Intl.NumberFormat('en-US');
 
@@ -67,13 +67,19 @@ export default function ServerManagerPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [expanded, setExpanded] = useState(null);
+  const [servers, setServers] = useState([]);
+  const [serverId, setServerId] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return new URLSearchParams(window.location.search).get('server') || '';
+  });
 
   const load = useCallback(
     async (isRefresh = false) => {
       if (isRefresh) setRefreshing(true);
 
       try {
-        const res = await fetch('/api/admin/server', { cache: 'no-store' });
+        const query = serverId ? `?server=${encodeURIComponent(serverId)}` : '';
+        const res = await fetch(`/api/admin/server${query}`, { cache: 'no-store' });
 
         if (res.status === 401) {
           router.replace('/admin');
@@ -87,6 +93,8 @@ export default function ServerManagerPage() {
         }
 
         setData(payload);
+        if (Array.isArray(payload?.servers)) setServers(payload.servers);
+        if (!serverId && payload?.server?.id) setServerId(payload.server.id);
         setError('');
       } catch {
         setError('Could not load server metrics');
@@ -95,7 +103,7 @@ export default function ServerManagerPage() {
         setRefreshing(false);
       }
     },
-    [router],
+    [router, serverId],
   );
 
   useEffect(() => {
@@ -106,6 +114,15 @@ export default function ServerManagerPage() {
     const timer = setInterval(() => void load(true), 30_000);
     return () => clearInterval(timer);
   }, [load]);
+
+  const selectServer = (id) => {
+    setServerId(id);
+    setExpanded(null);
+    const url = new URL(window.location.href);
+    if (id) url.searchParams.set('server', id);
+    else url.searchParams.delete('server');
+    window.history.replaceState(null, '', url.toString());
+  };
 
   const signOut = async () => {
     await fetch('/api/admin/session', { method: 'DELETE' });
@@ -131,13 +148,30 @@ export default function ServerManagerPage() {
             <div>
               <h1 className="text-xl font-bold">Server Manager</h1>
               <p className="text-xs text-slate-500">
-                {data?.host?.hostname} · {data?.host?.platform} · {data?.host?.arch} ·{' '}
+                {data?.host?.hostname} · {data?.host?.platform} ·{' '}
                 {data?.host?.cpuCount} vCPU · Node {data?.host?.nodeVersion}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {servers.length > 0 && (
+              <div className="relative">
+                <select
+                  value={serverId || data?.server?.id || ''}
+                  onChange={(event) => selectServer(event.target.value)}
+                  className="appearance-none rounded-xl border border-white/10 bg-white/5 py-2 pl-3 pr-8 text-xs font-semibold text-slate-200 outline-none transition-colors hover:bg-white/10 focus:border-brand-400/60"
+                  aria-label="Select server"
+                >
+                  {servers.map((server) => (
+                    <option key={server.id} value={server.id} className="bg-ink-800">
+                      {server.label} ({server.host})
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+              </div>
+            )}
             <span className="hidden text-xs text-slate-500 sm:block">
               Updated {new Date(data?.generatedAt).toLocaleTimeString()}
             </span>
@@ -162,6 +196,12 @@ export default function ServerManagerPage() {
         {error && (
           <p className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
             {error}
+          </p>
+        )}
+
+        {data?.unreachable && (
+          <p className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+            Could not reach {data?.server?.label || 'that server'}. Check SSH access from this host.
           </p>
         )}
 
