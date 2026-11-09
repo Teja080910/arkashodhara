@@ -8,3 +8,6 @@ npm-debug.log*
 .env
 .env.local
 .env.*.local
+
+# admin panel secrets
+.env.local
