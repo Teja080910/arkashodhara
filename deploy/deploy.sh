@@ -30,7 +30,8 @@ echo "==> Deploying ${APP_NAME} (branch: ${BRANCH}, port: ${PORT})"
 # --- Pre-flight: make sure the port is free (or already held by our node app) ---
 if command -v ss >/dev/null 2>&1; then
   OWNER="$(ss -ltnp 2>/dev/null | grep "[:.]${PORT} " || true)"
-  if [ -n "${OWNER}" ] && ! echo "${OWNER}" | grep -q "node"; then
+  # Next 14 reports as "next-server", older versions as "node".
+  if [ -n "${OWNER}" ] && ! echo "${OWNER}" | grep -Eq "node|next-server"; then
     echo "ERROR: port ${PORT} is already used by another app:"
     echo "${OWNER}"
     echo "Pick a free port, e.g.  PORT=3200 ./deploy/deploy.sh"
