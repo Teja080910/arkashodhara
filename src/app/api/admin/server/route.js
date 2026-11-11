@@ -7,11 +7,12 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request) {
-  const email = readRequestSession(request);
+  const session = await readRequestSession(request);
 
-  if (!email) {
+  if (!session) {
     return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
   }
+  const email = session.email;
 
   const { searchParams } = new URL(request.url);
   const serverId = searchParams.get('server');
