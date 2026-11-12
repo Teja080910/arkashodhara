@@ -245,6 +245,7 @@ services:
       context: ../../project-tracker
       dockerfile: ../server/deploy/Dockerfile.frontend
       args:
+        NODE_IMAGE: ${PT_NODE_IMAGE:-node:20-alpine}
         STANDALONE: 'false'
         NEXT_PUBLIC_API_URL: ${WEB_API_URL_PT:-http://localhost:4105}
         NEXT_PUBLIC_AUTH_URL: ${WEB_AUTH_URL:-http://localhost:4100}

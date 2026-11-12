@@ -123,7 +123,7 @@ export class ProjectTrackerDataController {
     }
     for (const [column, list] of parsePairs(query.in)) {
       if (!col(column)) continue;
-      conditions.push(sql`${col(column)}::text = any(${list.split('|')})`);
+      conditions.push(inArray(col(column) as any, list.split('|')));
     }
 
     if (name === 'notifications' || name === 'push_subscriptions' || name === 'personal_access_tokens') {
@@ -284,7 +284,7 @@ export class ProjectTrackerDataController {
       );
     for (const [column, list] of parsePairs(query.in)) {
       if (!col(column)) continue;
-      conditions.push(sql`${col(column)}::text = any(${list.split('|')})`);
+      conditions.push(inArray(col(column) as any, list.split('|')));
     }
     return conditions;
   }
