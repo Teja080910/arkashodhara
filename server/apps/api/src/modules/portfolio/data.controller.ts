@@ -45,6 +45,14 @@ function parseKeyValues(raw?: string): Array<[string, string]> {
     .map(([key, value]) => [key!, value!]);
 }
 
+function toCamel(column: string): string {
+  return column.replace(/_([a-z])/g, (_, char: string) => char.toUpperCase());
+}
+
+function columnFor(table: any, column: string): any {
+  return table[column] ?? table[toCamel(column)];
+}
+
 @Controller('data')
 export class PortfolioDataController {
   constructor(
@@ -72,12 +80,16 @@ export class PortfolioDataController {
     const query = querySchema.parse(rawQuery);
     const user = await this.viewer(request);
 
-    const conditions = parseKeyValues(query.eq).map(([column, value]) =>
-      sql`${(table as any)[column]}::text = ${value}`,
-    );
+    const conditions: ReturnType<typeof sql>[] = [];
+    for (const [column, value] of parseKeyValues(query.eq)) {
+      const target = columnFor(table, column);
+      if (target) conditions.push(sql`${target}::text = ${value}`);
+    }
     for (const [column, list] of parseKeyValues(query.in)) {
+      const target = columnFor(table, column);
+      if (!target) continue;
       const values = list.split('|');
-      conditions.push(sql`${(table as any)[column]}::text = any(${values})`);
+      conditions.push(sql`${target}::text = any(${values})`);
     }
 
     if (name === 'profiles') {
@@ -87,9 +99,18 @@ export class PortfolioDataController {
       if (!user) conditions.push(eq(guideContent.show, true));
     }
     if (name === 'portfolio_contents') {
-      if (!user) throw new ForbiddenError('Sign in to read portfolio content');
-      const visible = await this.visibleUserIds(user);
-      conditions.push(inArray(portfolioContents.userId, visible));
+      // Public profiles expose their published portfolio content. Signed-in
+      // users additionally see content shared through their teams, plus their
+      // own content.
+      const publicProfiles = await this.db
+        .select({ id: profiles.id })
+        .from(profiles)
+        .where(eq(profiles.show, true));
+      const visible = new Set(publicProfiles.map((row) => row.id));
+      if (user) {
+        for (const id of await this.visibleUserIds(user)) visible.add(id);
+      }
+      conditions.push(inArray(portfolioContents.userId, [...visible]));
     }
     if (name === 'folio_teams') {
       const visible = await this.visibleTeamIds(user);
@@ -119,7 +140,7 @@ export class PortfolioDataController {
       .where(conditions.length ? and(...conditions) : undefined)
       .$dynamic();
     if (orderColumn) {
-      const column = (table as any)[orderColumn];
+      const column = columnFor(table, orderColumn);
       if (column) statement = statement.orderBy(direction(column as never));
     }
     if (query.limit) statement = statement.limit(query.limit);
@@ -196,9 +217,11 @@ export class PortfolioDataController {
     const patch = z.record(z.string(), z.unknown()).parse(body);
     this.assertWrite(name as TableName, patch, user, 'update');
 
-    const conditions = parseKeyValues(query.eq).map(([column, value]) =>
-      sql`${(table as any)[column]}::text = ${value}`,
-    );
+    const conditions: ReturnType<typeof sql>[] = [];
+    for (const [column, value] of parseKeyValues(query.eq)) {
+      const target = columnFor(table, column);
+      if (target) conditions.push(sql`${target}::text = ${value}`);
+    }
     if (name === 'profiles') conditions.push(eq(profiles.id, user.id));
     if (name === 'portfolio_contents') conditions.push(eq(portfolioContents.userId, user.id));
     if (name === 'folio_teams') conditions.push(eq(folioTeams.ownerId, user.id));
@@ -226,11 +249,15 @@ export class PortfolioDataController {
     const user = await this.requireViewer(request);
     const query = querySchema.parse(rawQuery);
 
-    const conditions = parseKeyValues(query.eq).map(([column, value]) =>
-      sql`${(table as any)[column]}::text = ${value}`,
-    );
+    const conditions: ReturnType<typeof sql>[] = [];
+    for (const [column, value] of parseKeyValues(query.eq)) {
+      const target = columnFor(table, column);
+      if (target) conditions.push(sql`${target}::text = ${value}`);
+    }
     for (const [column, list] of parseKeyValues(query.in)) {
-      conditions.push(sql`${(table as any)[column]}::text = any(${list.split('|')})`);
+      const target = columnFor(table, column);
+      if (!target) continue;
+      conditions.push(sql`${target}::text = any(${list.split('|')})`);
     }
 
     if (name === 'folio_teams') conditions.push(eq(folioTeams.ownerId, user.id));
