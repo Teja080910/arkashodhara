@@ -1,0 +1,204 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: platform-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_SUPERUSER:-platform}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERPASSWORD:?set POSTGRES_SUPERPASSWORD}
+      POSTGRES_DB: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_SUPERUSER:-platform} -d postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [platform]
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  minio:
+    image: bitnamilegacy/minio:latest
+    container_name: platform-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio:/bitnami/minio/data
+    ports:
+      - '127.0.0.1:19000:9000'
+      - '127.0.0.1:19001:9001'
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [platform]
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  minio-init:
+    image: bitnamilegacy/minio-client:latest
+    container_name: platform-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ['/bin/sh', '/init/minio-init.sh']
+    env_file:
+      - env/rendered/minio.env
+    volumes:
+      - ./minio:/init:ro
+    networks: [platform]
+    restart: 'no'
+
+  auth:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        APP: auth
+    container_name: platform-auth
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - env/rendered/auth.env
+    ports:
+      - '127.0.0.1:4100:4100'
+    healthcheck:
+      test: ['CMD-SHELL', 'node -e "fetch(\"http://127.0.0.1:4100/health\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks: [platform]
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  api-drawer:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        APP: api
+    container_name: platform-api-drawer
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    env_file:
+      - env/rendered/api-drawer.env
+    ports:
+      - '127.0.0.1:4102:4102'
+    networks: [platform]
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  api-env-manager:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        APP: api
+    container_name: platform-api-env-manager
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - env/rendered/api-env-manager.env
+    ports:
+      - '127.0.0.1:4103:4103'
+    networks: [platform]
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  api-portfolio:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        APP: api
+    container_name: platform-api-portfolio
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    env_file:
+      - env/rendered/api-portfolio.env
+    ports:
+      - '127.0.0.1:4104:4104'
+    networks: [platform]
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  api-project-tracker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        APP: api
+    container_name: platform-api-project-tracker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    env_file:
+      - env/rendered/api-project-tracker.env
+    ports:
+      - '127.0.0.1:4105:4105'
+    networks: [platform]
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+
+  api-arkasodhara:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        APP: api
+    container_name: platform-api-arkasodhara
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - env/rendered/api-arkasodhara.env
+    ports:
+      - '127.0.0.1:4101:4101'
+    networks: [platform]
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+volumes:
+  pgdata:
+  minio:
+
+networks:
+  platform:
+    driver: bridge

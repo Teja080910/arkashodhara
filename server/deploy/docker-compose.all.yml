@@ -1,0 +1,286 @@
+# One-stack compose: postgres, minio, auth, 5 APIs and 5 frontends.
+#
+# Usage (from this directory):
+#   cp env.example .env                 # fill in the real values
+#   ./scripts/render-env.sh             # writes env/rendered/*.env
+#   docker compose -f docker-compose.all.yml up -d
+#   docker compose -f docker-compose.all.yml down
+#
+# Backend-only stack (no Next.js frontends) is still available in
+# docker-compose.yml, and both files share the same volumes/network names.
+
+name: platform
+
+x-api-defaults: &api-defaults
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+    args:
+      APP: api
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+  networks: [platform]
+  deploy:
+    resources:
+      limits:
+        memory: 512m
+
+x-frontend-defaults: &frontend-defaults
+  build:
+    context: ../..
+    dockerfile: deploy/Dockerfile.frontend
+  restart: unless-stopped
+  networks: [platform]
+  deploy:
+    resources:
+      limits:
+        memory: 512m
+
+services:
+  # ---------------------------------------------------------------- infra ---
+  postgres:
+    image: postgres:17-alpine
+    container_name: platform-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_SUPERUSER:-platform}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERPASSWORD:?set POSTGRES_SUPERPASSWORD}
+      POSTGRES_DB: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_SUPERUSER:-platform} -d postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [platform]
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  minio:
+    image: bitnamilegacy/minio:latest
+    container_name: platform-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio:/bitnami/minio/data
+    ports:
+      - '127.0.0.1:19000:9000'
+      - '127.0.0.1:19001:9001'
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [platform]
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  minio-init:
+    image: bitnamilegacy/minio-client:latest
+    container_name: platform-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ['/bin/sh', '/init/minio-init.sh']
+    env_file:
+      - env/rendered/minio.env
+    volumes:
+      - ./minio:/init:ro
+    networks: [platform]
+    restart: 'no'
+
+  # ----------------------------------------------------------- backend ---
+  auth:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        APP: auth
+    container_name: platform-auth
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - env/rendered/auth.env
+    ports:
+      - '127.0.0.1:4100:4100'
+    healthcheck:
+      test: ['CMD-SHELL', 'node -e "fetch(\"http://127.0.0.1:4100/health\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks: [platform]
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  api-arkasodhara:
+    <<: *api-defaults
+    container_name: platform-api-arkasodhara
+    env_file:
+      - env/rendered/api-arkasodhara.env
+    ports:
+      - '127.0.0.1:4101:4101'
+
+  api-drawer:
+    <<: *api-defaults
+    container_name: platform-api-drawer
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    env_file:
+      - env/rendered/api-drawer.env
+    ports:
+      - '127.0.0.1:4102:4102'
+
+  api-env-manager:
+    <<: *api-defaults
+    container_name: platform-api-env-manager
+    env_file:
+      - env/rendered/api-env-manager.env
+    ports:
+      - '127.0.0.1:4103:4103'
+
+  api-portfolio:
+    <<: *api-defaults
+    container_name: platform-api-portfolio
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    env_file:
+      - env/rendered/api-portfolio.env
+    ports:
+      - '127.0.0.1:4104:4104'
+
+  api-project-tracker:
+    <<: *api-defaults
+    container_name: platform-api-project-tracker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    env_file:
+      - env/rendered/api-project-tracker.env
+    ports:
+      - '127.0.0.1:4105:4105'
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+
+  # ---------------------------------------------------------- frontends ---
+  web-arkasodhara:
+    <<: *frontend-defaults
+    container_name: platform-web-arkasodhara
+    build:
+      context: ../../arkasodhara
+      dockerfile: ../server/deploy/Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_AUTH_URL: ${WEB_AUTH_URL:-http://localhost:4100}
+    env_file:
+      - env/rendered/web-arkasodhara.env
+    ports:
+      - '127.0.0.1:3117:3000'
+    depends_on:
+      auth:
+        condition: service_started
+
+  web-drawer:
+    <<: *frontend-defaults
+    container_name: platform-web-drawer
+    build:
+      context: ../../drawer
+      dockerfile: ../server/deploy/Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${WEB_API_URL:-http://localhost:4102}
+        NEXT_PUBLIC_AUTH_URL: ${WEB_AUTH_URL:-http://localhost:4100}
+        NEXT_PUBLIC_FILES_URL: ${DRAWER_FILES_URL:-http://localhost:19000/drawer-flow-images}
+    env_file:
+      - env/rendered/web-drawer.env
+    ports:
+      - '127.0.0.1:3002:3000'
+    depends_on:
+      api-drawer:
+        condition: service_started
+
+  web-portfolio:
+    <<: *frontend-defaults
+    container_name: platform-web-portfolio
+    build:
+      context: ../../portfolio
+      dockerfile: ../server/deploy/Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${WEB_API_URL_PORTFOLIO:-http://localhost:4104}
+        NEXT_PUBLIC_AUTH_URL: ${WEB_AUTH_URL:-http://localhost:4100}
+        NEXT_PUBLIC_FILES_URL: ${PORTFOLIO_FILES_URL:-http://localhost:19000/portfolio-profile-photos}
+    env_file:
+      - env/rendered/web-portfolio.env
+    ports:
+      - '127.0.0.1:3010:3000'
+    depends_on:
+      api-portfolio:
+        condition: service_started
+
+  web-project-tracker:
+    <<: *frontend-defaults
+    container_name: platform-web-project-tracker
+    build:
+      context: ../../project-tracker
+      dockerfile: ../server/deploy/Dockerfile.frontend
+      args:
+        STANDALONE: 'false'
+        NEXT_PUBLIC_API_URL: ${WEB_API_URL_PT:-http://localhost:4105}
+        NEXT_PUBLIC_AUTH_URL: ${WEB_AUTH_URL:-http://localhost:4100}
+        NEXT_PUBLIC_WS_URL: ${WEB_WS_URL:-ws://localhost:4105/ws}
+        NEXT_PUBLIC_FILES_URL: ${PT_FILES_URL:-http://localhost:19000/pt-task-screenshots}
+    env_file:
+      - env/rendered/web-project-tracker.env
+    ports:
+      - '127.0.0.1:3005:3000'
+    depends_on:
+      api-project-tracker:
+        condition: service_started
+
+  web-env-manager:
+    <<: *frontend-defaults
+    container_name: platform-web-env-manager
+    build:
+      context: ../../env-manager
+      dockerfile: ../server/deploy/Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_AUTH_URL: ${WEB_AUTH_URL:-http://localhost:4100}
+    env_file:
+      - env/rendered/web-env-manager.env
+    ports:
+      - '127.0.0.1:3011:3000'
+    volumes:
+      - envmanager-data:/data
+    depends_on:
+      api-env-manager:
+        condition: service_started
+
+volumes:
+  pgdata:
+  minio:
+  envmanager-data:
+
+networks:
+  platform:
+    driver: bridge

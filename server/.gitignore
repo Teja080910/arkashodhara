@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.next/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+.tsbuildinfo
+*.tsbuildinfo
+deploy/.env
+deploy/env/rendered/
+deploy/env/loaded/
+*.cookies
+cookie*.txt
+.env.local
