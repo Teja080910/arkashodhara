@@ -60,10 +60,30 @@ const pushSubscription = z.object({
 
 const rolePatch = z.object({ role: z.string().min(1).max(64) });
 const disabledPatch = z.object({ disabled: z.boolean() });
+const trackerBucket = z.enum(['apks', 'avatars', 'task-screenshots', 'docs']);
+const uploadPresign = z.object({
+  bucket: trackerBucket,
+  objectPath: z.string().max(1024).optional(),
+  fileName: z.string().max(255).optional(),
+  contentType: z.string().max(128).optional(),
+  projectId: z.string().uuid().optional(),
+});
+const uploadRemove = z.object({ bucket: trackerBucket, objectKey: z.string().min(1).max(1024) });
+const apkRegister = z.object({
+  fileName: z.string().min(1).max(255),
+  sizeBytes: z.number().int().nonnegative(),
+  storagePath: z.string().min(1).max(1024),
+});
 const profilePatch = z.object({
   fullName: z.string().max(200).nullable().optional(),
   avatarUrl: z.string().max(2048).nullable().optional(),
   githubId: z.string().max(120).nullable().optional(),
+});
+const userCreate = z.object({
+  email: z.string().email(),
+  password: z.string().min(8).max(128),
+  fullName: z.string().min(1).max(200),
+  role: z.string().min(1).max(64).default('viewer'),
 });
 
 @Controller('pt')
@@ -86,9 +106,36 @@ export class ProjectTrackerController {
     return { roles: await this.service.listRoles() };
   }
 
+  @Post('uploads/presign')
+  async presignUpload(@CurrentUser() user: AuthUser, @Body() body: unknown): Promise<unknown> {
+    return this.service.presignTrackerUpload(user, uploadPresign.parse(body));
+  }
+
+  @Post('uploads/remove')
+  async removeUpload(@CurrentUser() user: AuthUser, @Body() body: unknown): Promise<unknown> {
+    const input = uploadRemove.parse(body);
+    await this.service.removeTrackerUpload(user, input);
+    return { ok: true };
+  }
+
+  @Get('uploads/list')
+  async listUploads(
+    @CurrentUser() user: AuthUser,
+    @Query('bucket') bucket?: string,
+    @Query('prefix') prefix?: string,
+  ): Promise<unknown> {
+    const parsed = trackerBucket.parse(bucket);
+    return { files: await this.service.listTrackerUploads(user, { bucket: parsed, prefix }) };
+  }
+
   @Get('profiles')
   async profiles(): Promise<unknown> {
     return { profiles: await this.service.listProfiles() };
+  }
+
+  @Post('users')
+  async createUser(@CurrentUser() user: AuthUser, @Body() body: unknown): Promise<unknown> {
+    return this.service.createTrackerUser(user, userCreate.parse(body));
   }
 
   @Patch('profiles/:id/role')
@@ -220,8 +267,8 @@ export class ProjectTrackerController {
   }
 
   @Delete('docs/:id')
-  async deleteDoc(@Param('id') id: string): Promise<unknown> {
-    await this.service.deleteDoc(id);
+  async deleteDoc(@CurrentUser() user: AuthUser, @Param('id') id: string): Promise<unknown> {
+    await this.service.deleteDoc(user, id);
     return { ok: true };
   }
 
@@ -230,9 +277,18 @@ export class ProjectTrackerController {
     return { apks: await this.service.listApks(id) };
   }
 
+  @Post('projects/:id/apks')
+  async registerApk(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ): Promise<unknown> {
+    return this.service.registerApk(user, { projectId: id, ...apkRegister.parse(body) });
+  }
+
   @Delete('apks/:id')
-  async deleteApk(@Param('id') id: string): Promise<unknown> {
-    await this.service.deleteApk(id);
+  async deleteApk(@CurrentUser() user: AuthUser, @Param('id') id: string): Promise<unknown> {
+    await this.service.deleteApk(user, id);
     return { ok: true };
   }
 
@@ -265,9 +321,9 @@ export class PublicProjectTrackerController {
   constructor(private readonly service: ProjectTrackerService) {}
 
   @Public()
-  @Get('apk/:slug/:fileName')
-  async apk(@Param('slug') slug: string, @Param('fileName') fileName: string): Promise<unknown> {
-    const result = await this.service.findApkBySlugAndName(slug, fileName);
+  @Get('apk/:slug/:identifier')
+  async apk(@Param('slug') slug: string, @Param('identifier') identifier: string): Promise<unknown> {
+    const result = await this.service.findApkBySlugAndName(slug, identifier);
     if (!result) return null;
     return result;
   }

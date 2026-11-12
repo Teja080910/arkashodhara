@@ -1,6 +1,8 @@
 import { betterAuth } from 'better-auth';
+import { hashPassword, verifyPassword } from 'better-auth/crypto';
 import { jwt } from 'better-auth/plugins';
 import { admin } from 'better-auth/plugins/admin';
+import bcrypt from 'bcryptjs';
 import { Pool } from 'pg';
 import nodemailer from 'nodemailer';
 
@@ -62,6 +64,16 @@ export function buildAuth(pool: Pool, options: AuthConfigOptions) {
       maxPasswordLength: 128,
       requireEmailVerification: false,
       autoSignIn: true,
+      password: {
+        hash: hashPassword,
+        verify: async ({ hash, password }) => {
+          // Supabase exported bcrypt hashes keep working for migrated users.
+          if (hash.startsWith('$2a$') || hash.startsWith('$2b$') || hash.startsWith('$2y$')) {
+            return bcrypt.compare(password, hash);
+          }
+          return verifyPassword({ hash, password });
+        },
+      },
       sendResetPassword: mailer
         ? async ({ user, url }) => {
             await mailer.sendMail({

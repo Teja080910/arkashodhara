@@ -73,6 +73,17 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     return rows[0] ?? null;
   }
 
+  async createUser(input: { email: string; password: string; name: string }): Promise<{ id: string; email: string; name: string }> {
+    const result = await this.auth.api.createUser({
+      body: {
+        email: input.email,
+        password: input.password,
+        name: input.name,
+      },
+    });
+    return { id: result.user.id, email: result.user.email, name: result.user.name };
+  }
+
   async listUsers(input: { limit: number; offset: number; query?: string }): Promise<{ total: number; users: UserRow[] }> {
     const where = input.query ? 'where lower(email) like lower($3) or lower(name) like lower($3)' : '';
     const params: unknown[] = [input.limit, input.offset];

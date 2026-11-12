@@ -12,7 +12,7 @@ import {
 import { Server, WebSocket } from 'ws';
 import { TokenVerifier, type AuthUser } from '@platform/authz';
 import { TOKEN_VERIFIER } from '@platform/authz';
-import { PT_EVENTS } from './project-tracker.service';
+import { PT_EVENTS, ProjectTrackerService } from './project-tracker.service';
 
 interface ClientState {
   user?: AuthUser;
@@ -29,7 +29,10 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   private readonly clients = new Map<WebSocket, ClientState>();
 
-  constructor(@Inject(TOKEN_VERIFIER) private readonly verifier: TokenVerifier) {}
+  constructor(
+    @Inject(TOKEN_VERIFIER) private readonly verifier: TokenVerifier,
+    private readonly tracker: ProjectTrackerService,
+  ) {}
 
   async handleConnection(client: WebSocket): Promise<void> {
     this.clients.set(client, { topics: new Set() });
@@ -70,14 +73,16 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       const state = this.clients.get(client);
       if (!state?.user) return this.send(client, { type: 'error', message: 'not authenticated' });
       const topics = message.topics ?? (message.topic ? [message.topic] : []);
+      const accepted: string[] = [];
       for (const topic of topics) {
-        if (!this.canAccess(state.user, topic)) {
+        if (!(await this.canAccess(state.user, topic))) {
           this.send(client, { type: 'error', message: `forbidden topic ${topic}` });
           continue;
         }
         state.topics.add(topic);
+        accepted.push(topic);
       }
-      this.send(client, { type: 'subscribed', topics });
+      this.send(client, { type: 'subscribed', topics: accepted });
       return;
     }
 
@@ -93,10 +98,23 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     if (message.type === 'ping') this.send(client, { type: 'pong' });
   }
 
-  private canAccess(user: AuthUser, topic: string): boolean {
-    if (topic.startsWith(`notifications:${user.id}`)) return true;
-    if (topic.startsWith('comments:') || topic.startsWith('reactions:') || topic.startsWith('project:')) {
-      return user.role === 'user' || user.role === 'admin';
+  private async canAccess(user: AuthUser, topic: string): Promise<boolean> {
+    if (topic === `notifications:${user.id}`) return true;
+    try {
+      if (topic.startsWith('comments:')) {
+        await this.tracker.assertTaskRole(user, topic.slice('comments:'.length), 'member');
+        return true;
+      }
+      if (topic.startsWith('reactions:')) {
+        await this.tracker.assertCommentRole(user, topic.slice('reactions:'.length), 'member');
+        return true;
+      }
+      if (topic.startsWith('project:')) {
+        await this.tracker.assertProjectRole(user, topic.slice('project:'.length), 'member');
+        return true;
+      }
+    } catch {
+      return false;
     }
     return false;
   }

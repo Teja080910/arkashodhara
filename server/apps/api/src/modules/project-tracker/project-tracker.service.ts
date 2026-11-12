@@ -3,7 +3,9 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { and, asc, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { AuthUser } from '@platform/authz';
 import { ConflictError, ForbiddenError, NotFoundError } from '@platform/common';
-import { DB, type Database } from '../../core.module';
+import { ObjectStorage } from '@platform/storage';
+import { DB, ENV, type Database } from '../../core.module';
+import type { Env } from '../../env';
 import {
   activityLogs,
   commentReactions,
@@ -37,6 +39,7 @@ export class ProjectTrackerService {
   constructor(
     @Inject(DB) private readonly db: Database,
     private readonly events: EventEmitter2,
+    @Inject(ENV) private readonly env: Env,
   ) {}
 
   async ensureProfile(user: AuthUser): Promise<typeof profiles.$inferSelect> {
@@ -65,6 +68,105 @@ export class ProjectTrackerService {
     const profile = await this.ensureProfile(user);
     if (profile.disabled) throw new ForbiddenError('Account disabled');
     return profile;
+  }
+
+  private isGlobalAdmin(profile: typeof profiles.$inferSelect): boolean {
+    return profile.role === 'super_admin' || profile.role === 'admin';
+  }
+
+  async accessFor(user: AuthUser): Promise<{
+    profile: typeof profiles.$inferSelect;
+    globalAdmin: boolean;
+    projectIds: string[];
+    adminProjectIds: string[];
+  }> {
+    const profile = await this.assertActive(user);
+    const globalAdmin = this.isGlobalAdmin(profile);
+    if (globalAdmin) {
+      return { profile, globalAdmin, projectIds: [], adminProjectIds: [] };
+    }
+
+    const [owned, memberships] = await Promise.all([
+      this.db.select({ id: projects.id }).from(projects).where(eq(projects.ownerId, profile.id)),
+      this.db
+        .select({ projectId: projectMembers.projectId, role: projectMembers.role })
+        .from(projectMembers)
+        .where(eq(projectMembers.userId, profile.id)),
+    ]);
+
+    const projectIds = new Set<string>(owned.map((row) => row.id));
+    const adminProjectIds = new Set<string>(owned.map((row) => row.id));
+    for (const row of memberships) {
+      projectIds.add(row.projectId);
+      if (row.role === 'project_admin') adminProjectIds.add(row.projectId);
+    }
+
+    return {
+      profile,
+      globalAdmin,
+      projectIds: [...projectIds],
+      adminProjectIds: [...adminProjectIds],
+    };
+  }
+
+  async assertProjectRole(
+    user: AuthUser,
+    projectId: string,
+    level: 'member' | 'developer' | 'admin' = 'member',
+  ): Promise<typeof profiles.$inferSelect> {
+    const profile = await this.assertActive(user);
+    if (this.isGlobalAdmin(profile)) return profile;
+
+    const rows = await this.db
+      .select({ ownerId: projects.ownerId })
+      .from(projects)
+      .where(eq(projects.id, projectId))
+      .limit(1);
+    if (!rows[0]) throw new NotFoundError('Project not found');
+    if (rows[0].ownerId === profile.id) return profile;
+
+    const member = await this.db
+      .select({ role: projectMembers.role })
+      .from(projectMembers)
+      .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, profile.id)))
+      .limit(1);
+    const role = member[0]?.role;
+    if (!role) throw new ForbiddenError('Not a member of this project');
+    if (level === 'admin' && role !== 'project_admin') {
+      throw new ForbiddenError('Project admin access required');
+    }
+    if (level === 'developer' && !['developer', 'project_admin'].includes(role)) {
+      throw new ForbiddenError('Developer access required');
+    }
+    return profile;
+  }
+
+  async assertTaskRole(
+    user: AuthUser,
+    taskId: string,
+    level: 'member' | 'developer' | 'admin' = 'member',
+  ): Promise<typeof profiles.$inferSelect> {
+    const rows = await this.db
+      .select({ projectId: tasks.projectId })
+      .from(tasks)
+      .where(eq(tasks.id, taskId))
+      .limit(1);
+    if (!rows[0]) throw new NotFoundError('Task not found');
+    return this.assertProjectRole(user, rows[0].projectId, level);
+  }
+
+  async assertCommentRole(
+    user: AuthUser,
+    commentId: string,
+    level: 'member' | 'developer' | 'admin' = 'member',
+  ): Promise<typeof profiles.$inferSelect> {
+    const rows = await this.db
+      .select({ taskId: comments.taskId })
+      .from(comments)
+      .where(eq(comments.id, commentId))
+      .limit(1);
+    if (!rows[0]) throw new NotFoundError('Comment not found');
+    return this.assertTaskRole(user, rows[0].taskId, level);
   }
 
   async listRoles(): Promise<unknown[]> {
@@ -115,6 +217,66 @@ export class ProjectTrackerService {
     }
     if (targetId === actor.id) throw new ForbiddenError('You cannot disable yourself');
     await this.db.update(profiles).set({ disabled, updatedAt: new Date() }).where(eq(profiles.id, targetId));
+  }
+
+  async createTrackerUser(
+    actor: AuthUser,
+    input: { email: string; password: string; fullName: string; role: string },
+  ): Promise<unknown> {
+    const actorProfile = await this.assertActive(actor);
+    if (!['super_admin', 'project_admin'].includes(actorProfile.role)) {
+      throw new ForbiddenError('Only admins can create users');
+    }
+    if (actorProfile.role !== 'super_admin' && ['super_admin', 'admin', 'project_admin'].includes(input.role)) {
+      throw new ForbiddenError('Only super admins can assign admin roles');
+    }
+    const roleRow = await this.db.select({ id: roles.id }).from(roles).where(eq(roles.id, input.role)).limit(1);
+    if (!roleRow[0]) throw new ConflictError('Unknown role');
+
+    if (!this.env.AUTH_URL) throw new ConflictError('Auth service is not configured');
+    const email = input.email.trim().toLowerCase();
+    const headers: Record<string, string> = { 'content-type': 'application/json' };
+    if (this.env.INTERNAL_SERVICE_TOKEN) headers['x-service-token'] = this.env.INTERNAL_SERVICE_TOKEN;
+
+    const foundRes = await fetch(
+      `${this.env.AUTH_URL}/internal/users/by-email?email=${encodeURIComponent(email)}`,
+      { headers, cache: 'no-store' },
+    );
+    let userId: string | null = null;
+    if (foundRes.ok) {
+      const found = (await foundRes.json()) as { user?: { id?: string } };
+      userId = found.user?.id ?? null;
+    }
+    if (!userId) {
+      const createRes = await fetch(`${this.env.AUTH_URL}/internal/users`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ email, password: input.password, name: input.fullName }),
+      });
+      const created = (await createRes.json().catch(() => null)) as
+        | { user?: { id?: string }; message?: string }
+        | null;
+      if (!createRes.ok || !created?.user?.id) {
+        throw new ConflictError(created?.message ?? 'Could not create user');
+      }
+      userId = created.user.id;
+    }
+
+    const inserted = await this.db
+      .insert(profiles)
+      .values({
+        id: userId,
+        email,
+        fullName: input.fullName,
+        role: input.role,
+        createdBy: actorProfile.id,
+      })
+      .onConflictDoUpdate({
+        target: profiles.id,
+        set: { email, fullName: input.fullName, role: input.role, updatedAt: new Date() },
+      })
+      .returning();
+    return inserted[0];
   }
 
   async listProjects(): Promise<unknown[]> {
@@ -171,7 +333,7 @@ export class ProjectTrackerService {
   }
 
   async updateProject(user: AuthUser, projectId: string, patch: Record<string, unknown>): Promise<unknown> {
-    await this.assertActive(user);
+    await this.assertProjectRole(user, projectId, 'admin');
     const values: Record<string, unknown> = { updatedAt: new Date() };
     for (const key of ['name', 'description', 'clientName', 'status'] as const) {
       if (patch[key] !== undefined) values[key] = patch[key];
@@ -183,12 +345,12 @@ export class ProjectTrackerService {
   }
 
   async deleteProject(user: AuthUser, projectId: string): Promise<void> {
-    const profile = await this.assertActive(user);
+    const profile = await this.assertProjectRole(user, projectId, 'admin');
     const rows = await this.db.select().from(projects).where(eq(projects.id, projectId)).limit(1);
     const project = rows[0];
     if (!project) throw new NotFoundError('Project not found');
-    if (project.ownerId !== profile.id && profile.role !== 'super_admin') {
-      throw new ForbiddenError('Only the owner or a super admin can delete');
+    if (project.ownerId !== profile.id && !this.isGlobalAdmin(profile)) {
+      throw new ForbiddenError('Only the owner or an admin can delete');
     }
     await this.db.delete(projects).where(eq(projects.id, projectId));
   }
@@ -238,6 +400,7 @@ export class ProjectTrackerService {
   async createTask(user: AuthUser, input: Record<string, unknown>): Promise<unknown> {
     const profile = await this.assertActive(user);
     const projectId = String(input.projectId);
+    await this.assertProjectRole(user, projectId, 'member');
     const project = await this.db.select({ id: projects.id }).from(projects).where(eq(projects.id, projectId)).limit(1);
     if (!project[0]) throw new NotFoundError('Project not found');
 
@@ -264,7 +427,7 @@ export class ProjectTrackerService {
   }
 
   async updateTask(user: AuthUser, taskId: string, patch: Record<string, unknown>): Promise<unknown> {
-    const profile = await this.assertActive(user);
+    const profile = await this.assertTaskRole(user, taskId, 'member');
     const values: Record<string, unknown> = { updatedAt: new Date() };
     for (const key of ['title', 'description', 'type', 'status', 'priority', 'versionId', 'assigneeId', 'dueDate'] as const) {
       if (patch[key] !== undefined) values[key] = patch[key];
@@ -283,7 +446,7 @@ export class ProjectTrackerService {
   }
 
   async deleteTask(user: AuthUser, taskId: string): Promise<void> {
-    const profile = await this.assertActive(user);
+    const profile = await this.assertTaskRole(user, taskId, 'admin');
     const rows = await this.db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
     if (!rows[0]) throw new NotFoundError('Task not found');
     await this.db
@@ -294,7 +457,7 @@ export class ProjectTrackerService {
   }
 
   async addComment(user: AuthUser, taskId: string, input: { message: string; imagePath?: string; fileType?: string; fileName?: string }): Promise<unknown> {
-    const profile = await this.assertActive(user);
+    const profile = await this.assertTaskRole(user, taskId, 'member');
     const taskRows = await this.db.select({ id: tasks.id, projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
     if (!taskRows[0]) throw new NotFoundError('Task not found');
 
@@ -317,18 +480,26 @@ export class ProjectTrackerService {
   }
 
   async deleteComment(user: AuthUser, commentId: string): Promise<void> {
-    const profile = await this.assertActive(user);
+    const profile = await this.assertCommentRole(user, commentId, 'member');
     const rows = await this.db.select().from(comments).where(eq(comments.id, commentId)).limit(1);
     if (!rows[0]) throw new NotFoundError('Comment not found');
-    if (rows[0].userId !== profile.id && profile.role !== 'super_admin') {
-      throw new ForbiddenError('Only the author or a super admin can delete');
+    if (rows[0].userId !== profile.id && !this.isGlobalAdmin(profile)) {
+      const context = await this.accessFor(user);
+      const task = await this.db
+        .select({ projectId: tasks.projectId })
+        .from(tasks)
+        .where(eq(tasks.id, rows[0].taskId))
+        .limit(1);
+      if (!task[0] || !context.adminProjectIds.includes(task[0].projectId)) {
+        throw new ForbiddenError('Only the author or a project admin can delete');
+      }
     }
     await this.db.delete(comments).where(eq(comments.id, commentId));
     this.events.emit(PT_EVENTS.commentDeleted, { taskId: rows[0].taskId, commentId });
   }
 
   async toggleReaction(user: AuthUser, commentId: string, emoji: string): Promise<unknown> {
-    const profile = await this.assertActive(user);
+    const profile = await this.assertCommentRole(user, commentId, 'member');
     const existing = await this.db
       .select({ id: commentReactions.id })
       .from(commentReactions)
@@ -409,7 +580,7 @@ export class ProjectTrackerService {
   }
 
   async createDoc(user: AuthUser, projectId: string, input: { title?: string; content?: string; parentId?: string | null }): Promise<unknown> {
-    const profile = await this.assertActive(user);
+    const profile = await this.assertProjectRole(user, projectId, 'member');
     const inserted = await this.db
       .insert(projectDocs)
       .values({
@@ -424,7 +595,9 @@ export class ProjectTrackerService {
   }
 
   async updateDoc(user: AuthUser, docId: string, patch: Record<string, unknown>): Promise<unknown> {
-    const profile = await this.assertActive(user);
+    const rows = await this.db.select({ projectId: projectDocs.projectId }).from(projectDocs).where(eq(projectDocs.id, docId)).limit(1);
+    if (!rows[0]) throw new NotFoundError('Doc not found');
+    const profile = await this.assertProjectRole(user, rows[0].projectId, 'member');
     const values: Record<string, unknown> = { updatedAt: new Date(), updatedBy: profile.id };
     for (const key of ['title', 'content', 'parentId'] as const) {
       if (patch[key] !== undefined) values[key] = patch[key];
@@ -434,7 +607,10 @@ export class ProjectTrackerService {
     return updated[0];
   }
 
-  async deleteDoc(docId: string): Promise<void> {
+  async deleteDoc(user: AuthUser, docId: string): Promise<void> {
+    const rows = await this.db.select({ projectId: projectDocs.projectId }).from(projectDocs).where(eq(projectDocs.id, docId)).limit(1);
+    if (!rows[0]) throw new NotFoundError('Doc not found');
+    await this.assertProjectRole(user, rows[0].projectId, 'admin');
     await this.db.delete(projectDocs).where(eq(projectDocs.id, docId));
   }
 
@@ -446,18 +622,129 @@ export class ProjectTrackerService {
       .orderBy(desc(projectApks.createdAt));
   }
 
-  async findApkBySlugAndName(projectSlug: string, fileName: string): Promise<unknown | null> {
+  async findApkBySlugAndName(projectSlug: string, identifier: string): Promise<unknown | null> {
+    const numeric = Number(identifier);
+    const byNumber = Number.isInteger(numeric) && numeric > 0 && String(numeric) === identifier;
     const rows = await this.db
       .select({ apk: projectApks, project: projects })
       .from(projectApks)
       .innerJoin(projects, eq(projects.id, projectApks.projectId))
-      .where(and(eq(projects.slug, projectSlug), eq(projectApks.fileName, fileName)))
+      .where(
+        and(
+          eq(projects.slug, projectSlug),
+          byNumber ? eq(projectApks.number, numeric) : eq(projectApks.fileName, identifier),
+        ),
+      )
+      .orderBy(desc(projectApks.createdAt))
       .limit(1);
     return rows[0] ?? null;
   }
 
+  private readonly storageCache = new Map<string, ObjectStorage>();
+
+  private trackerStorage(bucket: 'apks' | 'avatars' | 'task-screenshots' | 'docs'): ObjectStorage {
+    const bucketName =
+      bucket === 'apks'
+        ? 'pt-apks'
+        : bucket === 'avatars'
+          ? 'pt-avatars'
+          : 'pt-task-screenshots';
+    const cached = this.storageCache.get(bucketName);
+    if (cached) return cached;
+
+    const publicRoot = this.env.S3_PUBLIC_BASE_URL?.replace(/\/[^/]+$/, '');
+    const storage = new ObjectStorage({
+      endpoint: this.env.S3_ENDPOINT,
+      presignEndpoint: this.env.S3_PRESIGN_ENDPOINT,
+      region: this.env.S3_REGION,
+      bucket: bucketName,
+      accessKey: this.env.S3_ACCESS_KEY,
+      secretKey: this.env.S3_SECRET_KEY,
+      forcePathStyle: this.env.S3_FORCE_PATH_STYLE,
+      signedUrlTtlSeconds: this.env.S3_SIGNED_URL_TTL_SECONDS,
+      publicBaseUrl: publicRoot ? `${publicRoot}/${bucketName}` : undefined,
+    });
+    this.storageCache.set(bucketName, storage);
+    return storage;
+  }
+
+  async presignTrackerUpload(
+    user: AuthUser,
+    input: {
+      bucket: 'apks' | 'avatars' | 'task-screenshots' | 'docs';
+      objectPath?: string;
+      fileName?: string;
+      contentType?: string;
+      projectId?: string;
+    },
+  ): Promise<unknown> {
+    await this.assertActive(user);
+    const storage = this.trackerStorage(input.bucket);
+    let objectKey: string;
+
+    if (input.bucket === 'apks') {
+      if (!input.projectId) throw new ConflictError('projectId is required');
+      await this.assertProjectRole(user, input.projectId, 'developer');
+      objectKey = `${input.projectId}/${Date.now()}-${safeFileName(input.fileName ?? 'app-release.apk')}`;
+    } else {
+      const requested = input.objectPath?.replace(/^\/+/, '');
+      if (requested && (requested.includes('..') || requested.startsWith('.'))) {
+        throw new ConflictError('Invalid object path');
+      }
+      if (input.bucket === 'avatars') {
+        const prefix = `${user.id}/`;
+        objectKey =
+          requested && requested.startsWith(prefix)
+            ? requested
+            : `${user.id}/avatar-${Date.now()}.${safeFileName(input.fileName ?? 'avatar.jpg').split('.').pop() ?? 'jpg'}`;
+      } else {
+        if (!requested) throw new ConflictError('objectPath is required');
+        objectKey = requested;
+        const projectId = objectKey.split('/')[0];
+        if (projectId && /^[0-9a-f-]{36}$/i.test(projectId)) {
+          await this.assertProjectRole(user, projectId, 'member');
+        }
+      }
+    }
+
+    return storage.presignUpload(objectKey, input.contentType);
+  }
+
+  async removeTrackerUpload(
+    user: AuthUser,
+    input: { bucket: 'apks' | 'avatars' | 'task-screenshots' | 'docs'; objectKey: string },
+  ): Promise<void> {
+    const access = await this.accessFor(user);
+    const storage = this.trackerStorage(input.bucket);
+    if (!input.objectKey || input.objectKey.includes('..')) throw new ConflictError('Invalid object key');
+
+    let allowed = access.globalAdmin || input.objectKey.startsWith(`${user.id}/`);
+    if (!allowed) {
+      const projectId = input.objectKey.split('/')[0];
+      if (projectId && /^[0-9a-f-]{36}$/i.test(projectId)) {
+        allowed = access.adminProjectIds.includes(projectId);
+      }
+    }
+    if (!allowed) throw new ForbiddenError('Not allowed to remove this object');
+    await storage.removeObject(input.objectKey);
+  }
+
+  async listTrackerUploads(
+    user: AuthUser,
+    input: { bucket: 'apks' | 'avatars' | 'task-screenshots' | 'docs'; prefix?: string },
+  ): Promise<Array<{ name: string; size: number; updatedAt: string }>> {
+    await this.assertActive(user);
+    const prefix = input.bucket === 'avatars' ? `${user.id}/` : input.prefix ?? `${user.id}/`;
+    const objects = await this.trackerStorage(input.bucket).listObjects(prefix);
+    return objects.map((object) => ({
+      name: object.key.slice(prefix.length),
+      size: object.size,
+      updatedAt: object.lastModified.toISOString(),
+    }));
+  }
+
   async registerApk(user: AuthUser, input: { projectId: string; fileName: string; sizeBytes: number; storagePath: string }): Promise<unknown> {
-    const profile = await this.assertActive(user);
+    const profile = await this.assertProjectRole(user, input.projectId, 'developer');
     const next = await this.db
       .select({ max: sql<number>`coalesce(max(${projectApks.number}), 0)::int` })
       .from(projectApks)
@@ -473,10 +760,25 @@ export class ProjectTrackerService {
         storagePath: input.storagePath,
       })
       .returning();
+
+    const apkStorage = this.trackerStorage('apks');
+    const rows = await this.db
+      .select({ id: projectApks.id, storagePath: projectApks.storagePath })
+      .from(projectApks)
+      .where(eq(projectApks.projectId, input.projectId))
+      .orderBy(desc(projectApks.createdAt));
+
+    for (const stale of rows.slice(5)) {
+      await this.db.delete(projectApks).where(eq(projectApks.id, stale.id));
+      await apkStorage.removeObject(stale.storagePath).catch(() => undefined);
+    }
     return inserted[0];
   }
 
-  async deleteApk(apkId: string): Promise<void> {
+  async deleteApk(user: AuthUser, apkId: string): Promise<void> {
+    const rows = await this.db.select({ projectId: projectApks.projectId }).from(projectApks).where(eq(projectApks.id, apkId)).limit(1);
+    if (!rows[0]) throw new NotFoundError('APK not found');
+    await this.assertProjectRole(user, rows[0].projectId, 'admin');
     await this.db.delete(projectApks).where(eq(projectApks.id, apkId));
   }
 
@@ -567,4 +869,13 @@ export function slugify(value: string): string {
     .replace(/[^a-z0-9-]/g, '')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '');
+}
+
+function safeFileName(value: string): string {
+  return value
+    .normalize('NFKD')
+    .replace(/[^\w.-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(-120) || 'file';
 }
