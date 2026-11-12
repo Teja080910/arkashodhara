@@ -251,6 +251,7 @@ services:
         NEXT_PUBLIC_AUTH_URL: ${WEB_AUTH_URL:-http://localhost:4100}
         NEXT_PUBLIC_WS_URL: ${WEB_WS_URL:-ws://localhost:4105/ws}
         NEXT_PUBLIC_FILES_URL: ${PT_FILES_URL:-http://localhost:19000/pt-task-screenshots}
+        NEXT_PUBLIC_APP_NAME: ${PT_APP_NAME:-Arkasodhara}
         NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
     env_file:
       - env/rendered/web-project-tracker.env
