@@ -30,7 +30,7 @@ create table if not exists profiles (
 );
 
 create unique index if not exists profiles_email_key on profiles (lower(email));
-create unique index if not exists profiles_github_id_key on profiles (github_id) where github_id is not null;
+create index if not exists profiles_github_id_idx on profiles (github_id);
 
 create table if not exists projects (
   id uuid primary key default gen_random_uuid(),
