@@ -787,6 +787,27 @@ export class ProjectTrackerService {
     return this.db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, profile.id));
   }
 
+  async listPushSubscriptionsFor(actor: AuthUser, targetId: string): Promise<unknown[]> {
+    const profile = await this.assertActive(actor);
+    if (profile.id !== targetId && !this.isGlobalAdmin(profile)) {
+      const shared = await this.db
+        .select({ projectId: projectMembers.projectId })
+        .from(projectMembers)
+        .where(
+          and(
+            eq(projectMembers.userId, profile.id),
+            inArray(
+              projectMembers.projectId,
+              this.db.select({ projectId: projectMembers.projectId }).from(projectMembers).where(eq(projectMembers.userId, targetId)),
+            ),
+          ),
+        )
+        .limit(1);
+      if (!shared[0]) throw new ForbiddenError('No shared project with this user');
+    }
+    return this.db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, targetId));
+  }
+
   async savePushSubscription(
     user: AuthUser,
     input: { endpoint: string; p256dh: string; auth: string; userAgent?: string },

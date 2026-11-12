@@ -91,12 +91,8 @@ export class ProjectTrackerDataController {
   private async requireActive(request: Request): Promise<AuthUser> {
     const user = await this.viewer(request);
     if (!user) throw new ForbiddenError('Sign in first');
-    const rows = await this.db
-      .select({ disabled: profiles.disabled })
-      .from(profiles)
-      .where(eq(profiles.id, user.id))
-      .limit(1);
-    if (rows[0]?.disabled) throw new ForbiddenError('Account disabled');
+    const profile = await this.tracker.ensureProfile(user);
+    if (profile.disabled) throw new ForbiddenError('Account disabled');
     return user;
   }
 

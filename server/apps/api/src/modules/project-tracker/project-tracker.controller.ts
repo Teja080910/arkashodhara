@@ -297,6 +297,11 @@ export class ProjectTrackerController {
     return { subscriptions: await this.service.listPushSubscriptions(user) };
   }
 
+  @Get('push/subscriptions/:userId')
+  async pushSubscriptionsFor(@CurrentUser() user: AuthUser, @Param('userId') userId: string): Promise<unknown> {
+    return { subscriptions: await this.service.listPushSubscriptionsFor(user, userId) };
+  }
+
   @Post('push/subscriptions')
   async savePush(@CurrentUser() user: AuthUser, @Body() body: unknown): Promise<unknown> {
     await this.service.savePushSubscription(user, pushSubscription.parse(body));
