@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
-import { AuthGuard, CurrentUser, Public, Roles, type AuthUser } from '@platform/authz';
+import { CurrentUser, Public, Roles, type AuthUser } from '@platform/authz';
+import { TrackerAuthGuard } from './tracker-auth.guard';
 import { z } from 'zod';
 import { ProjectTrackerService } from './project-tracker.service';
 
@@ -86,8 +87,9 @@ const userCreate = z.object({
   role: z.string().min(1).max(64).default('viewer'),
 });
 
+@Public()
 @Controller('pt')
-@UseGuards(AuthGuard)
+@UseGuards(TrackerAuthGuard)
 export class ProjectTrackerController {
   constructor(private readonly service: ProjectTrackerService) {}
 
