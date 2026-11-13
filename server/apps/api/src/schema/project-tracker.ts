@@ -36,6 +36,45 @@ export const profiles = pgTable(
   (table) => [uniqueIndex('profiles_email_key').on(sql`lower(${table.email})`)],
 );
 
+export const teams = pgTable(
+  'teams',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    description: text('description'),
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => profiles.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('teams_name_key').on(table.name),
+    uniqueIndex('teams_slug_key').on(table.slug),
+  ],
+);
+
+export const teamMembers = pgTable(
+  'team_members',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    teamId: uuid('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    role: text('role').notNull().default('developer'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('team_members_team_user_key').on(table.teamId, table.userId),
+    index('idx_team_members_team_id').on(table.teamId),
+    index('idx_team_members_user_id').on(table.userId),
+  ],
+);
+
 export const projects = pgTable(
   'projects',
   {
@@ -45,6 +84,7 @@ export const projects = pgTable(
     description: text('description'),
     clientName: text('client_name'),
     status: text('status').notNull().default('active'),
+    teamId: uuid('team_id').references(() => teams.id, { onDelete: 'set null' }),
     ownerId: text('owner_id')
       .notNull()
       .references(() => profiles.id),
@@ -54,6 +94,7 @@ export const projects = pgTable(
   (table) => [
     uniqueIndex('projects_name_key').on(table.name),
     uniqueIndex('projects_slug_key').on(table.slug),
+    index('idx_projects_team_id').on(table.teamId),
   ],
 );
 
@@ -334,6 +375,8 @@ export const projectDocs = pgTable(
 );
 
 export type PtProfile = typeof profiles.$inferSelect;
+export type PtTeam = typeof teams.$inferSelect;
+export type PtTeamMember = typeof teamMembers.$inferSelect;
 export type PtProject = typeof projects.$inferSelect;
 export type PtTask = typeof tasks.$inferSelect;
 export type PtComment = typeof comments.$inferSelect;

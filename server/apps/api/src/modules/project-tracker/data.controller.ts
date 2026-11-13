@@ -23,11 +23,15 @@ import {
   taskImages,
   taskTags,
   tasks,
+  teamMembers,
+  teams,
   versions,
 } from '../../schema/project-tracker';
 
 const TABLES = {
   profiles,
+  teams,
+  team_members: teamMembers,
   projects,
   project_members: projectMembers,
   versions,
@@ -45,6 +49,8 @@ const TABLES = {
   project_docs: projectDocs,
   roles,
 } as const;
+
+type TrackerAccess = Awaited<ReturnType<ProjectTrackerService['accessFor']>>;
 
 type TableName = keyof typeof TABLES;
 
@@ -110,6 +116,7 @@ export class ProjectTrackerDataController {
     const table = this.table(name);
     const query = querySchema.parse(rawQuery);
     const user = await this.requireActive(request);
+    const access = await this.tracker.accessFor(user);
 
     const col = (column: string): unknown => table[column] ?? table[toCamel(column)];
     const conditions = parsePairs(query.eq)
@@ -132,6 +139,7 @@ export class ProjectTrackerDataController {
     if (name === 'tasks') {
       conditions.push(isNull(tasks.deletedAt));
     }
+    this.scopeRead(name as TableName, access, conditions);
 
     const orderParts = query.order ? query.order.split(':') : [];
     const orderColumn = orderParts[0];
@@ -178,7 +186,7 @@ export class ProjectTrackerDataController {
     const payload = this.prepare(name as TableName, z.record(z.string(), z.unknown()).parse(body));
     await this.authorizeInsert(name as TableName, payload, user);
 
-    if (name === 'projects') {
+    if (name === 'projects' || name === 'teams') {
       payload.slug = String(payload.slug ?? slugify(String(payload.name)));
     }
     if (name === 'versions') {
@@ -228,6 +236,14 @@ export class ProjectTrackerDataController {
       delete patch.projectId;
     }
     if (name === 'project_members') delete patch.userId;
+    if (name === 'teams') {
+      delete patch.ownerId;
+      if (patch.name) patch.slug = slugify(String(patch.name));
+    }
+    if (name === 'team_members') {
+      delete patch.teamId;
+      delete patch.userId;
+    }
     if (name === 'comments' || name === 'task_images') delete patch.taskId;
     if (name === 'comments') delete patch.userId;
     if (name === 'task_images') delete patch.uploadedBy;
@@ -301,11 +317,23 @@ export class ProjectTrackerDataController {
       }
       return;
     }
-    if (name === 'projects') {
-      if (!access.globalAdmin && access.profile.role !== 'project_admin') {
-        throw new ForbiddenError('Only admins can create projects');
-      }
+    if (name === 'teams') {
+      if (!access.globalAdmin) throw new ForbiddenError('Only global admins can create teams');
       payload.ownerId = user.id;
+      return;
+    }
+    if (name === 'team_members') {
+      await this.tracker.assertTeamRole(user, String(payload.teamId), 'admin');
+      return;
+    }
+    if (name === 'projects') {
+      const teamId = payload.teamId ? String(payload.teamId) : null;
+      if (!access.globalAdmin) {
+        if (!teamId) throw new ForbiddenError('Only global admins can create projects outside a team');
+        await this.tracker.assertTeamRole(user, teamId, 'admin');
+      }
+      payload.teamId = teamId;
+      payload.ownerId = teamId && !access.globalAdmin ? await this.tracker.teamOwnerId(teamId) : user.id;
       return;
     }
     if (name === 'personal_access_tokens' || name === 'push_subscriptions') {
@@ -351,12 +379,24 @@ export class ProjectTrackerDataController {
       return;
     }
     if (name === 'notifications') {
+      const targetId = payload.userId ? String(payload.userId) : null;
       if (payload.projectId) {
         await this.tracker.assertProjectRole(user, String(payload.projectId), 'member');
-      } else {
-        payload.userId = user.id;
+      } else if (targetId && targetId !== user.id && !access.globalAdmin) {
+        if (access.teamIds.length === 0) throw new ForbiddenError('No shared team with this user');
+        const sharedTeam = await this.db
+          .select({ id: teamMembers.id })
+          .from(teamMembers)
+          .where(
+            and(
+              inArray(teamMembers.teamId, access.teamIds),
+              eq(teamMembers.userId, targetId),
+            ),
+          )
+          .limit(1);
+        if (!sharedTeam[0]) throw new ForbiddenError('No shared team with this user');
       }
-      payload.userId = payload.userId ?? user.id;
+      payload.userId = targetId ?? user.id;
       payload.actorId = payload.actorId ?? user.id;
     }
   }
@@ -369,6 +409,9 @@ export class ProjectTrackerDataController {
   ): Promise<void> {
     if (name === 'profiles') {
       const access = await this.tracker.accessFor(user);
+      if (patch.role !== undefined && access.profile.role !== 'super_admin') {
+        throw new ForbiddenError('Only super admins can change roles');
+      }
       if (!access.globalAdmin) {
         conditions.push(eq(profiles.id, user.id));
       } else if (patch.role !== undefined || patch.disabled !== undefined) {
@@ -400,8 +443,16 @@ export class ProjectTrackerDataController {
       await this.scopeProjects(name, user, conditions, 'member');
       return;
     }
+    if (name === 'projects' && patch.teamId !== undefined) {
+      const access = await this.tracker.accessFor(user);
+      if (!access.globalAdmin) throw new ForbiddenError('Only global admins can move projects between teams');
+    }
     if (name === 'projects' || name === 'project_members' || name === 'versions' || name === 'tags' || name === 'project_apks') {
       await this.scopeProjects(name, user, conditions, 'admin');
+      return;
+    }
+    if (name === 'teams' || name === 'team_members') {
+      await this.scopeTeams(name, user, conditions, 'admin');
       return;
     }
     if (name === 'task_tags' || name === 'task_images' || name === 'project_docs') {
@@ -440,6 +491,10 @@ export class ProjectTrackerDataController {
       conditions.push(eq(commentReactions.userId, user.id));
       return;
     }
+    if (name === 'teams' || name === 'team_members') {
+      await this.scopeTeams(name, user, conditions, 'admin');
+      return;
+    }
     if (name === 'tasks' || name === 'projects' || name === 'project_members' || name === 'versions' || name === 'tags' || name === 'project_apks') {
       await this.scopeProjects(name, user, conditions, 'admin');
       return;
@@ -447,6 +502,81 @@ export class ProjectTrackerDataController {
     if (name === 'task_tags' || name === 'task_images' || name === 'project_docs') {
       await this.scopeProjects(name, user, conditions, 'member');
     }
+  }
+
+  private scopeRead(name: TableName, access: TrackerAccess, conditions: ReturnType<typeof sql>[]): void {
+    if (access.globalAdmin) return;
+
+    const projectIds = access.projectIds;
+    const none = projectIds.length === 0;
+    const projectFilter = none ? sql`false` : inArray(tasks.projectId, projectIds);
+    const taskIds = () => this.db.select({ id: tasks.id }).from(tasks).where(projectFilter);
+
+    switch (name) {
+      case 'teams':
+        conditions.push(access.teamIds.length ? inArray(teams.id, access.teamIds) : sql`false`);
+        return;
+      case 'team_members':
+        conditions.push(access.teamIds.length ? inArray(teamMembers.teamId, access.teamIds) : sql`false`);
+        return;
+      case 'projects':
+        conditions.push(none ? sql`false` : inArray(projects.id, projectIds));
+        return;
+      case 'project_members':
+        conditions.push(none ? sql`false` : inArray(projectMembers.projectId, projectIds));
+        return;
+      case 'versions':
+        conditions.push(none ? sql`false` : inArray(versions.projectId, projectIds));
+        return;
+      case 'tags':
+        conditions.push(none ? sql`false` : inArray(tags.projectId, projectIds));
+        return;
+      case 'tasks':
+        conditions.push(projectFilter);
+        return;
+      case 'project_apks':
+        conditions.push(none ? sql`false` : inArray(projectApks.projectId, projectIds));
+        return;
+      case 'project_docs':
+        conditions.push(none ? sql`false` : inArray(projectDocs.projectId, projectIds));
+        return;
+      case 'task_tags':
+        conditions.push(inArray(taskTags.taskId, taskIds()));
+        return;
+      case 'task_images':
+        conditions.push(inArray(taskImages.taskId, taskIds()));
+        return;
+      case 'comments':
+        conditions.push(inArray(comments.taskId, taskIds()));
+        return;
+      case 'comment_reactions': {
+        const commentIds = this.db.select({ id: comments.id }).from(comments).where(inArray(comments.taskId, taskIds()));
+        conditions.push(inArray(commentReactions.commentId, commentIds));
+        return;
+      }
+      case 'activity_logs':
+        conditions.push(none ? sql`false` : inArray(activityLogs.projectId, projectIds));
+        return;
+      default:
+        return;
+    }
+  }
+
+  private async scopeTeams(
+    name: TableName,
+    user: AuthUser,
+    conditions: ReturnType<typeof sql>[],
+    level: 'member' | 'admin',
+  ): Promise<void> {
+    const access = await this.tracker.accessFor(user);
+    if (access.globalAdmin) return;
+    const ids = level === 'admin' ? access.adminTeamIds : access.teamIds;
+    if (ids.length === 0) {
+      conditions.push(sql`false`);
+      return;
+    }
+    if (name === 'teams') conditions.push(inArray(teams.id, ids));
+    if (name === 'team_members') conditions.push(inArray(teamMembers.teamId, ids));
   }
 
   private async scopeProjects(

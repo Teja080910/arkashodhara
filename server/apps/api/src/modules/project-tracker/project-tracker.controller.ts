@@ -8,6 +8,7 @@ const projectCreate = z.object({
   name: z.string().min(1).max(160),
   description: z.string().max(4000).optional(),
   clientName: z.string().max(160).optional(),
+  teamId: z.string().uuid().nullable().optional(),
 });
 
 const projectPatch = z.object({
@@ -15,6 +16,7 @@ const projectPatch = z.object({
   description: z.string().max(4000).nullable().optional(),
   clientName: z.string().max(160).nullable().optional(),
   status: z.enum(['active', 'completed', 'archived']).optional(),
+  teamId: z.string().uuid().nullable().optional(),
 });
 
 const taskCreate = z.object({

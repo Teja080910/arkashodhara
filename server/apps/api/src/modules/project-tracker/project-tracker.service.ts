@@ -21,6 +21,8 @@ import {
   taskImages,
   taskTags,
   tasks,
+  teamMembers,
+  teams,
   versions,
 } from '../../schema/project-tracker';
 import { profiles } from '../../schema/project-tracker';
@@ -77,16 +79,30 @@ export class ProjectTrackerService {
   async accessFor(user: AuthUser): Promise<{
     profile: typeof profiles.$inferSelect;
     globalAdmin: boolean;
+    teamIds: string[];
+    adminTeamIds: string[];
     projectIds: string[];
     adminProjectIds: string[];
   }> {
     const profile = await this.assertActive(user);
     const globalAdmin = this.isGlobalAdmin(profile);
     if (globalAdmin) {
-      return { profile, globalAdmin, projectIds: [], adminProjectIds: [] };
+      return {
+        profile,
+        globalAdmin,
+        teamIds: [],
+        adminTeamIds: [],
+        projectIds: [],
+        adminProjectIds: [],
+      };
     }
 
-    const [owned, memberships] = await Promise.all([
+    const [ownedTeams, teamMemberships, owned, memberships] = await Promise.all([
+      this.db.select({ id: teams.id }).from(teams).where(eq(teams.ownerId, profile.id)),
+      this.db
+        .select({ teamId: teamMembers.teamId, role: teamMembers.role })
+        .from(teamMembers)
+        .where(eq(teamMembers.userId, profile.id)),
       this.db.select({ id: projects.id }).from(projects).where(eq(projects.ownerId, profile.id)),
       this.db
         .select({ projectId: projectMembers.projectId, role: projectMembers.role })
@@ -94,19 +110,83 @@ export class ProjectTrackerService {
         .where(eq(projectMembers.userId, profile.id)),
     ]);
 
+    const teamIds = new Set<string>(ownedTeams.map((row) => row.id));
+    const adminTeamIds = new Set<string>(ownedTeams.map((row) => row.id));
+    for (const row of teamMemberships) {
+      teamIds.add(row.teamId);
+      if (row.role === 'team_admin') adminTeamIds.add(row.teamId);
+    }
+
+    const teamProjects = teamIds.size
+      ? await this.db
+          .select({ id: projects.id, teamId: projects.teamId })
+          .from(projects)
+          .where(inArray(projects.teamId, [...teamIds]))
+      : [];
+
     const projectIds = new Set<string>(owned.map((row) => row.id));
     const adminProjectIds = new Set<string>(owned.map((row) => row.id));
     for (const row of memberships) {
       projectIds.add(row.projectId);
       if (row.role === 'project_admin') adminProjectIds.add(row.projectId);
     }
+    for (const row of teamProjects) {
+      projectIds.add(row.id);
+      if (row.teamId && adminTeamIds.has(row.teamId)) adminProjectIds.add(row.id);
+    }
 
     return {
       profile,
       globalAdmin,
+      teamIds: [...teamIds],
+      adminTeamIds: [...adminTeamIds],
       projectIds: [...projectIds],
       adminProjectIds: [...adminProjectIds],
     };
+  }
+
+  async teamOwnerId(teamId: string): Promise<string> {
+    const rows = await this.db
+      .select({ ownerId: teams.ownerId })
+      .from(teams)
+      .where(eq(teams.id, teamId))
+      .limit(1);
+    if (!rows[0]) throw new NotFoundError('Team not found');
+    return rows[0].ownerId;
+  }
+
+  async hasTeamAdminAccess(user: AuthUser): Promise<boolean> {
+    const access = await this.accessFor(user);
+    return access.globalAdmin || access.adminTeamIds.length > 0;
+  }
+
+  async assertTeamRole(
+    user: AuthUser,
+    teamId: string,
+    level: 'member' | 'admin' = 'member',
+  ): Promise<typeof profiles.$inferSelect> {
+    const profile = await this.assertActive(user);
+    if (this.isGlobalAdmin(profile)) return profile;
+
+    const rows = await this.db
+      .select({ ownerId: teams.ownerId })
+      .from(teams)
+      .where(eq(teams.id, teamId))
+      .limit(1);
+    if (!rows[0]) throw new NotFoundError('Team not found');
+    if (rows[0].ownerId === profile.id) return profile;
+
+    const member = await this.db
+      .select({ role: teamMembers.role })
+      .from(teamMembers)
+      .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, profile.id)))
+      .limit(1);
+    const role = member[0]?.role;
+    if (!role) throw new ForbiddenError('Not a member of this team');
+    if (level === 'admin' && role !== 'team_admin') {
+      throw new ForbiddenError('Team admin access required');
+    }
+    return profile;
   }
 
   async assertProjectRole(
@@ -118,19 +198,41 @@ export class ProjectTrackerService {
     if (this.isGlobalAdmin(profile)) return profile;
 
     const rows = await this.db
-      .select({ ownerId: projects.ownerId })
+      .select({ ownerId: projects.ownerId, teamId: projects.teamId })
       .from(projects)
       .where(eq(projects.id, projectId))
       .limit(1);
     if (!rows[0]) throw new NotFoundError('Project not found');
     if (rows[0].ownerId === profile.id) return profile;
 
+    let role: string | undefined;
+    if (rows[0].teamId) {
+      const [teamRows, teamMemberRows] = await Promise.all([
+        this.db
+          .select({ ownerId: teams.ownerId })
+          .from(teams)
+          .where(eq(teams.id, rows[0].teamId))
+          .limit(1),
+        this.db
+          .select({ role: teamMembers.role })
+          .from(teamMembers)
+          .where(and(eq(teamMembers.teamId, rows[0].teamId), eq(teamMembers.userId, profile.id)))
+          .limit(1),
+      ]);
+      if (teamRows[0]?.ownerId === profile.id) return profile;
+      if (teamMemberRows[0]?.role) {
+        role = teamMemberRows[0].role === 'team_admin' ? 'project_admin' : teamMemberRows[0].role;
+      }
+    }
+
     const member = await this.db
       .select({ role: projectMembers.role })
       .from(projectMembers)
       .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, profile.id)))
       .limit(1);
-    const role = member[0]?.role;
+    if (member[0]?.role === 'project_admin') role = 'project_admin';
+    else if (member[0]?.role && !role) role = member[0].role;
+
     if (!role) throw new ForbiddenError('Not a member of this project');
     if (level === 'admin' && role !== 'project_admin') {
       throw new ForbiddenError('Project admin access required');
@@ -224,10 +326,12 @@ export class ProjectTrackerService {
     input: { email: string; password: string; fullName: string; role: string },
   ): Promise<unknown> {
     const actorProfile = await this.assertActive(actor);
-    if (!['super_admin', 'project_admin'].includes(actorProfile.role)) {
+    const actorIsAdmin = this.isGlobalAdmin(actorProfile);
+    const actorIsTeamAdmin = await this.hasTeamAdminAccess(actor);
+    if (!actorIsAdmin && !actorIsTeamAdmin && actorProfile.role !== 'project_admin') {
       throw new ForbiddenError('Only admins can create users');
     }
-    if (actorProfile.role !== 'super_admin' && ['super_admin', 'admin', 'project_admin'].includes(input.role)) {
+    if (actorProfile.role !== 'super_admin' && ['super_admin', 'admin', 'team_admin', 'project_admin'].includes(input.role)) {
       throw new ForbiddenError('Only super admins can assign admin roles');
     }
     const roleRow = await this.db.select({ id: roles.id }).from(roles).where(eq(roles.id, input.role)).limit(1);
@@ -308,14 +412,21 @@ export class ProjectTrackerService {
     };
   }
 
-  async createProject(user: AuthUser, input: { name: string; description?: string; clientName?: string }): Promise<unknown> {
+  async createProject(
+    user: AuthUser,
+    input: { name: string; description?: string; clientName?: string; teamId?: string | null },
+  ): Promise<unknown> {
     const profile = await this.assertActive(user);
-    if (!['super_admin', 'admin', 'project_admin'].includes(profile.role)) {
-      throw new ForbiddenError('Only admins can create projects');
+    if (!this.isGlobalAdmin(profile)) {
+      if (!input.teamId) throw new ForbiddenError('Only admins can create projects outside a team');
+      await this.assertTeamRole(user, input.teamId, 'admin');
     }
     const existing = await this.db.select({ id: projects.id }).from(projects).where(eq(projects.name, input.name)).limit(1);
     if (existing[0]) throw new ConflictError('Project name already exists');
 
+    const ownerId = input.teamId && !this.isGlobalAdmin(profile)
+      ? await this.teamOwnerId(input.teamId)
+      : profile.id;
     const inserted = await this.db
       .insert(projects)
       .values({
@@ -323,20 +434,27 @@ export class ProjectTrackerService {
         slug: slugify(input.name),
         description: input.description ?? null,
         clientName: input.clientName ?? null,
-        ownerId: profile.id,
+        teamId: input.teamId ?? null,
+        ownerId,
       })
       .returning();
     const project = inserted[0]!;
-    await this.db.insert(projectMembers).values({ projectId: project.id, userId: profile.id, role: 'project_admin' });
+    if (this.isGlobalAdmin(profile)) {
+      await this.db.insert(projectMembers).values({ projectId: project.id, userId: profile.id, role: 'project_admin' });
+    }
     await this.logActivity({ projectId: project.id, userId: profile.id, action: 'project.created' });
     return project;
   }
 
   async updateProject(user: AuthUser, projectId: string, patch: Record<string, unknown>): Promise<unknown> {
-    await this.assertProjectRole(user, projectId, 'admin');
+    const profile = await this.assertProjectRole(user, projectId, 'admin');
     const values: Record<string, unknown> = { updatedAt: new Date() };
     for (const key of ['name', 'description', 'clientName', 'status'] as const) {
       if (patch[key] !== undefined) values[key] = patch[key];
+    }
+    if (patch.teamId !== undefined) {
+      if (!this.isGlobalAdmin(profile)) throw new ForbiddenError('Only global admins can move projects between teams');
+      values.teamId = patch.teamId ?? null;
     }
     if (values.name) values.slug = slugify(String(values.name));
     const updated = await this.db.update(projects).set(values).where(eq(projects.id, projectId)).returning();
@@ -345,13 +463,9 @@ export class ProjectTrackerService {
   }
 
   async deleteProject(user: AuthUser, projectId: string): Promise<void> {
-    const profile = await this.assertProjectRole(user, projectId, 'admin');
-    const rows = await this.db.select().from(projects).where(eq(projects.id, projectId)).limit(1);
-    const project = rows[0];
-    if (!project) throw new NotFoundError('Project not found');
-    if (project.ownerId !== profile.id && !this.isGlobalAdmin(profile)) {
-      throw new ForbiddenError('Only the owner or an admin can delete');
-    }
+    await this.assertProjectRole(user, projectId, 'admin');
+    const rows = await this.db.select({ id: projects.id }).from(projects).where(eq(projects.id, projectId)).limit(1);
+    if (!rows[0]) throw new NotFoundError('Project not found');
     await this.db.delete(projects).where(eq(projects.id, projectId));
   }
 
