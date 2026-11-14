@@ -17,9 +17,11 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
   }
 
+  // Better Auth validates the Origin header on state-changing requests.
+  const origin = request.headers.get('origin') ?? AUTH_URL;
   const response = await fetch(`${AUTH_URL}/api/auth/sign-in/email`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', origin },
     body: JSON.stringify({ email, password }),
   });
   if (!response.ok) {
@@ -40,17 +42,18 @@ export async function GET() {
   return NextResponse.json({ email: session?.email ?? null });
 }
 
-export async function DELETE() {
+export async function DELETE(request) {
   const store = await cookies();
   const header = store
     .getAll()
     .map((cookie) => `${cookie.name}=${cookie.value}`)
     .join('; ');
 
+  const origin = request.headers.get('origin') ?? AUTH_URL;
   const response = NextResponse.json({ ok: true });
   const signOut = await fetch(`${AUTH_URL}/api/auth/sign-out`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', cookie: header },
+    headers: { 'content-type': 'application/json', cookie: header, origin },
     body: JSON.stringify({}),
   }).catch(() => null);
 
