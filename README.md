@@ -26,14 +26,26 @@ AUTH_URL=http://localhost:4100
 NEXT_PUBLIC_AUTH_URL=http://localhost:4100
 ADMIN_EMAILS=you@example.com
 ADMIN_SERVERS="local|This server|local"
+SOCIAL_AGENT_URL=https://social.arkasodhara.tech
+SOCIAL_AGENT_ADMIN_TOKEN=the-social-agent-admin-token
 ```
 
 `AUTH_URL` is only used by server-side routes. `ADMIN_EMAILS` is the admin
-allow-list for `/admin`.
+allow-list for `/admin`. `SOCIAL_AGENT_ADMIN_TOKEN` is only read by server-side
+API routes and is never sent to the browser.
 
 ## Admin
 
-`/admin` signs in through the auth service and shows server/container metrics.
+`/admin` signs in through the auth service and opens a sidebar admin console:
+
+- **Server Manager** — server, PM2, Docker and project metrics.
+- **Social Agent** — connection health, Meta credentials, queue and published
+  posts. Nested tabs: Overview, Instagram, Facebook, LinkedIn, Queue, Posted.
+
+The social pages call `/api/admin/social/*` on this Next.js app. Those routes
+proxy to `SOCIAL_AGENT_URL` with `SOCIAL_AGENT_ADMIN_TOKEN`, so the social
+agent's admin token stays server-side.
+
 Access is granted when the auth user has `role = "admin"` or their email is in
 `ADMIN_EMAILS`.
 
