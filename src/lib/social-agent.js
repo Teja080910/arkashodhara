@@ -1,5 +1,6 @@
 const BASE_URL = (process.env.SOCIAL_AGENT_URL || 'https://social.arkasodhara.tech').replace(/\/$/, '');
 const ADMIN_TOKEN = process.env.SOCIAL_AGENT_ADMIN_TOKEN || '';
+const PUBLIC_BASE_URL = (process.env.SOCIAL_AGENT_PUBLIC_URL || BASE_URL).replace(/\/$/, '');
 
 export class SocialAgentError extends Error {
   constructor(message, status = 502) {
@@ -10,7 +11,7 @@ export class SocialAgentError extends Error {
 }
 
 export function socialAgentBaseUrl() {
-  return BASE_URL;
+  return PUBLIC_BASE_URL;
 }
 
 export function socialAgentConnectUrl(platform = 'meta') {

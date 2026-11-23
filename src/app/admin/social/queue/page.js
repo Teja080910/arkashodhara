@@ -48,6 +48,24 @@ export default function SocialQueuePage() {
     }
   };
 
+  const deletePost = async (post) => {
+    if (!window.confirm(`Delete draft #${post.id}?\n\nThis removes it permanently from the queue.`)) return;
+    setBusyId(post.id);
+    setError('');
+    setMessage('');
+    try {
+      const response = await fetch(`/api/admin/social/posts/${post.id}`, { method: 'DELETE' });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || 'Could not delete');
+      setMessage(`Draft #${post.id} deleted.`);
+      await refresh();
+    } catch (err) {
+      setError(err.message || 'Could not delete');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const reject = async (post) => {
     if (!window.confirm(`Reject draft #${post.id}?`)) return;
     setBusyId(post.id);
@@ -163,6 +181,7 @@ export default function SocialQueuePage() {
           posts={state.posts.pending}
           baseUrl={state.baseUrl}
           onPublish={(post) => void publish(post)}
+          onDelete={(post) => void deletePost(post)}
           onReject={(post) => void reject(post)}
           busyId={busyId}
         />

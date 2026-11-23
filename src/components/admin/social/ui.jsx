@@ -241,6 +241,7 @@ export function PendingTable({
   posts,
   baseUrl,
   onPublish,
+  onDelete,
   onReject,
   busyId = null,
   empty = 'No drafts waiting for approval.',
@@ -298,6 +299,16 @@ export function PendingTable({
                     >
                       Publish
                     </button>
+                    {onDelete && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => onDelete(post)}
+                        className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[10px] font-semibold text-slate-300 hover:bg-white/10 disabled:opacity-50"
+                      >
+                        Delete
+                      </button>
+                    )}
                     <button
                       type="button"
                       disabled={busy}

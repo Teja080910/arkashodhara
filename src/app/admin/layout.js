@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Briefcase,
+  CalendarDays,
   Camera,
   ExternalLink,
   LayoutDashboard,
@@ -127,6 +128,20 @@ export default function AdminLayout({ children }) {
               );
             })}
           </div>
+
+          <Link
+            href="/admin/social-planner"
+            onClick={() => setMobileOpen(false)}
+            aria-current={isActive(pathname, '/admin/social-planner') ? 'page' : undefined}
+            className={`mt-4 flex items-center gap-2.5 rounded-xl px-3 py-2.5 font-semibold transition-colors ${
+              isActive(pathname, '/admin/social-planner')
+                ? 'bg-brand-600/20 text-brand-200'
+                : 'text-slate-400 hover:bg-white/5 hover:text-white'
+            }`}
+          >
+            <CalendarDays className="h-4 w-4" />
+            Social Planner
+          </Link>
         </nav>
 
         <div className="border-t border-white/10 p-4">

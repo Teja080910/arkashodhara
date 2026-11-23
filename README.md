@@ -28,6 +28,8 @@ ADMIN_EMAILS=you@example.com
 ADMIN_SERVERS="local|This server|local"
 SOCIAL_AGENT_URL=https://social.arkasodhara.tech
 SOCIAL_AGENT_ADMIN_TOKEN=the-social-agent-admin-token
+SOCIAL_PLANNER_API_URL=http://localhost:4106
+SOCIAL_PLANNER_ADMIN_TOKEN=the-social-planner-admin-token
 ```
 
 `AUTH_URL` is only used by server-side routes. `ADMIN_EMAILS` is the admin
@@ -41,6 +43,8 @@ API routes and is never sent to the browser.
 - **Server Manager** — server, PM2, Docker and project metrics.
 - **Social Agent** — connection health, Meta credentials, queue and published
   posts. Nested tabs: Overview, Instagram, Facebook, LinkedIn, Queue, Posted.
+- **Social Planner** — content calendar, topic series, festival posts and two-bot
+  approval routing. Nested tabs: Calendar, Series, Festivals.
 
 The social pages call `/api/admin/social/*` on this Next.js app. Those routes
 proxy to `SOCIAL_AGENT_URL` with `SOCIAL_AGENT_ADMIN_TOKEN`, so the social
