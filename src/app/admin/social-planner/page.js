@@ -175,13 +175,20 @@ export default function SocialPlannerPage() {
       setScriptError(err.message);
       return;
     }
-    await run(`save-script-${scriptItem.id}`, async () => {
+    setBusy(`save-script-${scriptItem.id}`);
+    try {
       await api(`/calendar/${scriptItem.id}/script`, {
         method: 'PUT',
         body: JSON.stringify({ script: parsed, day: scriptItem.storyboard?.day }),
       });
       setScriptItem(null);
-    }, 'Script saved');
+      setMessage('Script saved');
+      await load();
+    } catch (err) {
+      setScriptError(err.message || 'Save failed');
+    } finally {
+      setBusy('');
+    }
   };
 
   const run = async (key, fn, success) => {
