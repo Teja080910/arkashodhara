@@ -379,15 +379,6 @@ export default function SocialPlannerPage() {
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex items-start gap-2">
-                        {item?.storyboard?.script && (
-                          <button
-                            type="button"
-                            onClick={() => { setScriptItem(item); setScriptText(JSON.stringify(item.storyboard.script, null, 2)); setScriptError(''); }}
-                            className={smallButton}
-                          >
-                            <FileText className="h-3 w-3" /> View
-                          </button>
-                        )}
                         {(item.coverPath || item.assetPath) && (
                           <a
                             href={item.assetKind === 'video' ? item.assetPath || item.coverPath : item.coverPath || item.assetPath}
