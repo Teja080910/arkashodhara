@@ -372,6 +372,17 @@ export default function SocialPlannerPage() {
                             <FileText className="h-3 w-3" /> Script
                           </button>
                         )}
+                        {(item.coverPath || item.assetPath) && (
+                          <button
+                            type="button"
+                            disabled={busy === `regen-${item.id}`}
+                            onClick={() => void run(`regen-${item.id}`, () => api(`/calendar/${item.id}/regenerate`, { method: 'POST' }), `Assets cleared for ${item.title}`)}
+                            className={smallButton}
+                            title="Clear assets and re-render on the next worker run"
+                          >
+                            <RefreshCw className="h-3 w-3" /> Regen
+                          </button>
+                        )}
                         {['planned', 'script_ready', 'video_ready'].includes(item.status) && (
                           <button
                             type="button"
