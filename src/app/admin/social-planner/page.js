@@ -191,6 +191,19 @@ export default function SocialPlannerPage() {
     }
   };
 
+  const needsAssets = (item) => {
+    if (!item?.storyboard?.script) return false;
+    if (item.assetKind === 'video') return !(item.assetPath && item.coverPath);
+    return !item.coverPath;
+  };
+  const awaitingRender = visibleCalendar.some(needsAssets);
+
+  useEffect(() => {
+    if (!awaitingRender) return undefined;
+    const timer = setInterval(() => { void load(); }, 10000);
+    return () => clearInterval(timer);
+  }, [awaitingRender, load]);
+
   const run = async (key, fn, success) => {
     setBusy(key);
     setError('');
@@ -451,7 +464,12 @@ export default function SocialPlannerPage() {
                             <RefreshCw className="h-3 w-3" /> Regen
                           </button>
                         )}
-                        {['planned', 'script_ready', 'video_ready'].includes(item.status) && (
+                        {['planned', 'script_ready', 'video_ready'].includes(item.status) && needsAssets(item) && (
+                          <span className={`${smallButton} text-brand-200`} title="The render worker is generating this asset">
+                            <RefreshCw className="h-3 w-3 animate-spin" /> Rendering
+                          </span>
+                        )}
+                        {['planned', 'script_ready', 'video_ready'].includes(item.status) && !needsAssets(item) && (
                           <button
                             type="button"
                             disabled={busy === `notify-${item.id}`}
