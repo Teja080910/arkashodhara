@@ -66,6 +66,7 @@ export default function SocialPlannerPage() {
   const [tab, setTab] = useState('calendar');
   const [overview, setOverview] = useState(null);
   const [calendar, setCalendar] = useState([]);
+  const [filters, setFilters] = useState({ platform: '', status: '' });
   const [series, setSeries] = useState([]);
   const [festivals, setFestivals] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -124,6 +125,19 @@ export default function SocialPlannerPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setFilters({ platform: params.get('platform') || '', status: params.get('status') || '' });
+  }, []);
+
+  const visibleCalendar = useMemo(() => {
+    return calendar.filter((item) => {
+      if (filters.platform && !(item.platforms || []).includes(filters.platform)) return false;
+      if (filters.status && item.status !== filters.status) return false;
+      return true;
+    });
+  }, [calendar, filters]);
 
   const run = async (key, fn, success) => {
     setBusy(key);
@@ -281,6 +295,14 @@ export default function SocialPlannerPage() {
           <p className="mb-4 mt-1 text-[11px] text-slate-500">
             Generation starts 3 days before. Push unlocks on the publish date and time.
           </p>
+          {(filters.platform || filters.status) && (
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+              <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">
+                {filters.platform ? `platform: ${filters.platform}` : `status: ${filters.status}`}
+              </span>
+              <a href="/admin/social-planner" className="text-brand-300 hover:text-brand-200">clear filter</a>
+            </div>
+          )}
           <div className="overflow-x-auto rounded-xl border border-white/5">
             <table className="w-full min-w-[900px] border-collapse">
               <thead>
@@ -291,7 +313,7 @@ export default function SocialPlannerPage() {
                 </tr>
               </thead>
               <tbody>
-                {calendar.map((item) => (
+                {visibleCalendar.map((item) => (
                   <tr key={item.id} className="border-b border-white/5 last:border-0">
                     <td className="whitespace-nowrap px-3 py-3 text-xs text-slate-300">
                       {item.publishDate} <span className="text-slate-600">{item.publishTime}</span>

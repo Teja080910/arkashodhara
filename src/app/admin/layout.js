@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -19,12 +19,12 @@ import {
 } from 'lucide-react';
 
 const socialLinks = [
-  { href: '/admin/social', label: 'Overview', icon: LayoutDashboard, exact: true },
-  { href: '/admin/social/instagram', label: 'Instagram', icon: Camera },
-  { href: '/admin/social/facebook', label: 'Facebook', icon: Users },
-  { href: '/admin/social/linkedin', label: 'LinkedIn', icon: Briefcase },
-  { href: '/admin/social/queue', label: 'Queue', icon: ListChecks },
-  { href: '/admin/social/posted', label: 'Posted', icon: Send },
+  { href: '/admin/social-planner', label: 'Planner', icon: LayoutDashboard },
+  { href: '/admin/social-planner?platform=instagram', label: 'Instagram', icon: Camera },
+  { href: '/admin/social-planner?platform=facebook', label: 'Facebook', icon: Users },
+  { href: '/admin/social-planner?platform=linkedin', label: 'LinkedIn', icon: Briefcase },
+  { href: '/admin/social-planner?status=pending_approval', label: 'Approvals', icon: ListChecks },
+  { href: '/admin/social-planner?status=published', label: 'Published', icon: Send },
 ];
 
 function isActive(pathname, href, exact = false) {
@@ -35,10 +35,15 @@ function isActive(pathname, href, exact = false) {
 export default function AdminLayout({ children }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    setSearch(window.location.search);
+  }, [pathname]);
 
   if (pathname === '/admin') return children;
 
-  const socialActive = pathname.startsWith('/admin/social');
+  const socialActive = pathname.startsWith('/admin/social-planner') || pathname.startsWith('/admin/social');
 
   return (
     <div className="min-h-screen bg-ink-900 text-white lg:flex">
@@ -94,9 +99,9 @@ export default function AdminLayout({ children }) {
             Social
           </p>
           <Link
-            href="/admin/social"
+            href="/admin/social-planner"
             onClick={() => setMobileOpen(false)}
-            aria-current={pathname === '/admin/social' ? 'page' : undefined}
+            aria-current={pathname === '/admin/social-planner' ? 'page' : undefined}
             className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 font-semibold transition-colors ${
               socialActive
                 ? 'text-brand-200'
@@ -104,17 +109,21 @@ export default function AdminLayout({ children }) {
             }`}
           >
             <Sparkles className="h-4 w-4" />
-            Social Agent
+            Social Planner
           </Link>
 
           <div className="mt-1 space-y-0.5 border-l border-white/10 pl-4">
             {socialLinks.map(({ href, label, icon: Icon, exact }) => {
-              const active = isActive(pathname, href, exact);
+              const [target, query] = href.split('?');
+              const active = isActive(pathname, target, exact)
+                ? query
+                  ? search === `?${query}`
+                  : !search
+                : false;
               return (
-                <Link
+                <a
                   key={href}
                   href={href}
-                  onClick={() => setMobileOpen(false)}
                   aria-current={active ? 'page' : undefined}
                   className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] transition-colors ${
                     active
@@ -124,24 +133,11 @@ export default function AdminLayout({ children }) {
                 >
                   <Icon className={`h-3.5 w-3.5 ${active ? 'text-brand-300' : ''}`} />
                   {label}
-                </Link>
+                </a>
               );
             })}
           </div>
 
-          <Link
-            href="/admin/social-planner"
-            onClick={() => setMobileOpen(false)}
-            aria-current={isActive(pathname, '/admin/social-planner') ? 'page' : undefined}
-            className={`mt-4 flex items-center gap-2.5 rounded-xl px-3 py-2.5 font-semibold transition-colors ${
-              isActive(pathname, '/admin/social-planner')
-                ? 'bg-brand-600/20 text-brand-200'
-                : 'text-slate-400 hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            <CalendarDays className="h-4 w-4" />
-            Social Planner
-          </Link>
         </nav>
 
         <div className="border-t border-white/10 p-4">
