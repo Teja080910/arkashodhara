@@ -75,6 +75,11 @@ export default function SocialPlannerPage() {
   const [message, setMessage] = useState('');
   const [seriesForm, setSeriesForm] = useState({ topic: '', totalDays: 30, startDate: today(1), audience: 'beginners' });
   const [festivalForm, setFestivalForm] = useState({ date: today(30), name: '', greeting: '', hashtags: '' });
+  const [dayOpen, setDayOpen] = useState(false);
+  const [dayForm, setDayForm] = useState({ date: today(3), time: '09:00', title: '', day: '', platforms: ['linkedin'], assetKind: 'image', caption: '' });
+  const [scriptItem, setScriptItem] = useState(null);
+  const [scriptText, setScriptText] = useState('');
+  const [scriptError, setScriptError] = useState('');
 
   const api = useCallback(
     async (path, options = {}) => {
@@ -138,6 +143,46 @@ export default function SocialPlannerPage() {
       return true;
     });
   }, [calendar, filters]);
+
+  const createDay = async () => {
+    if (!dayForm.title.trim()) return;
+    await run('create-day', async () => {
+      const result = await api('/calendar', {
+        method: 'POST',
+        body: JSON.stringify({
+          date: dayForm.date,
+          time: dayForm.time,
+          title: dayForm.title,
+          platforms: dayForm.platforms,
+          assetKind: dayForm.assetKind,
+          caption: dayForm.caption || dayForm.title,
+          day: dayForm.day ? Number(dayForm.day) : undefined,
+        }),
+      });
+      if (!result?.calendarId) throw new Error('Could not create the day');
+      setDayOpen(false);
+      setDayForm({ date: today(3), time: '09:00', title: '', day: '', platforms: ['linkedin'], assetKind: 'image', caption: '' });
+    }, 'Day created');
+  };
+
+  const saveScript = async () => {
+    if (!scriptItem) return;
+    setScriptError('');
+    let parsed;
+    try {
+      parsed = JSON.parse(scriptText);
+    } catch (err) {
+      setScriptError(err.message);
+      return;
+    }
+    await run(`save-script-${scriptItem.id}`, async () => {
+      await api(`/calendar/${scriptItem.id}/script`, {
+        method: 'PUT',
+        body: JSON.stringify({ script: parsed, day: scriptItem.storyboard?.day }),
+      });
+      setScriptItem(null);
+    }, 'Script saved');
+  };
 
   const run = async (key, fn, success) => {
     setBusy(key);
@@ -291,10 +336,17 @@ export default function SocialPlannerPage() {
 
       {tab === 'calendar' && (
         <Card>
-          <h2 className="text-sm font-semibold text-white">Content calendar</h2>
-          <p className="mb-4 mt-1 text-[11px] text-slate-500">
-            Generation starts 3 days before. Push unlocks on the publish date and time.
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Content calendar</h2>
+              <p className="mb-4 mt-1 text-[11px] text-slate-500">
+                Generation starts 3 days before. Push unlocks on the publish date and time.
+              </p>
+            </div>
+            <button type="button" onClick={() => setDayOpen(true)} className={smallButton}>
+              <Plus className="h-3 w-3" /> Add day
+            </button>
+          </div>
           {(filters.platform || filters.status) && (
             <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
               <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">
@@ -320,6 +372,15 @@ export default function SocialPlannerPage() {
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex items-start gap-2">
+                        {item?.storyboard?.script && (
+                          <button
+                            type="button"
+                            onClick={() => { setScriptItem(item); setScriptText(JSON.stringify(item.storyboard.script, null, 2)); setScriptError(''); }}
+                            className={smallButton}
+                          >
+                            <FileText className="h-3 w-3" /> View
+                          </button>
+                        )}
                         {(item.coverPath || item.assetPath) && (
                           <a
                             href={item.assetKind === 'video' ? item.assetPath || item.coverPath : item.coverPath || item.assetPath}
@@ -370,6 +431,15 @@ export default function SocialPlannerPage() {
                             className={smallButton}
                           >
                             <FileText className="h-3 w-3" /> Script
+                          </button>
+                        )}
+                        {item?.storyboard?.script && (
+                          <button
+                            type="button"
+                            onClick={() => { setScriptItem(item); setScriptText(JSON.stringify(item.storyboard.script, null, 2)); setScriptError(''); }}
+                            className={smallButton}
+                          >
+                            <FileText className="h-3 w-3" /> View
                           </button>
                         )}
                         {(item.coverPath || item.assetPath) && (
@@ -549,6 +619,91 @@ export default function SocialPlannerPage() {
           </Card>
         </div>
       )}
+      {dayOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm">
+          <div className="mt-10 w-full max-w-lg rounded-2xl border border-white/10 bg-ink-800 p-5 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-white">Add a day</h3>
+              <button type="button" onClick={() => setDayOpen(false)} className="rounded-lg p-1 text-slate-400 hover:bg-white/5 hover:text-white"><X className="h-4 w-4" /></button>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-[11px] text-slate-400">Date
+                <input type="date" value={dayForm.date} onChange={(e) => setDayForm({ ...dayForm, date: e.target.value })} className={inputClass} />
+              </label>
+              <label className="text-[11px] text-slate-400">Time
+                <input type="time" value={dayForm.time} onChange={(e) => setDayForm({ ...dayForm, time: e.target.value })} className={inputClass} />
+              </label>
+            </div>
+            <label className="mt-3 block text-[11px] text-slate-400">Title
+              <input value={dayForm.title} onChange={(e) => setDayForm({ ...dayForm, title: e.target.value })} placeholder="Day 8 · Tokens" className={inputClass} />
+            </label>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="text-[11px] text-slate-400">Day number
+                <input type="number" min="1" value={dayForm.day} onChange={(e) => setDayForm({ ...dayForm, day: e.target.value })} placeholder="8" className={inputClass} />
+              </label>
+              <label className="text-[11px] text-slate-400">Asset kind
+                <select value={dayForm.assetKind} onChange={(e) => setDayForm({ ...dayForm, assetKind: e.target.value })} className={inputClass}>
+                  <option value="image">image (LinkedIn card)</option>
+                  <option value="video">video (Reel)</option>
+                </select>
+              </label>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-3 text-[11px] text-slate-300">
+              {['linkedin', 'instagram', 'facebook'].map((platform) => (
+                <label key={platform} className="inline-flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={dayForm.platforms.includes(platform)}
+                    onChange={(e) => setDayForm({
+                      ...dayForm,
+                      platforms: e.target.checked
+                        ? [...dayForm.platforms, platform]
+                        : dayForm.platforms.filter((p) => p !== platform),
+                    })}
+                  />
+                  {platform}
+                </label>
+              ))}
+            </div>
+            <label className="mt-3 block text-[11px] text-slate-400">Caption
+              <textarea rows={4} value={dayForm.caption} onChange={(e) => setDayForm({ ...dayForm, caption: e.target.value })} className={inputClass} />
+            </label>
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setDayOpen(false)} className={smallButton}>Cancel</button>
+              <button type="button" disabled={busy === 'create-day'} onClick={() => void createDay()} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-600 to-violet-600 px-4 py-2 text-xs font-semibold text-white disabled:opacity-60">
+                <Plus className="h-3.5 w-3.5" /> Create day
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {scriptItem && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm">
+          <div className="mt-10 w-full max-w-3xl rounded-2xl border border-white/10 bg-ink-800 p-5 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-white">Script · {scriptItem.title}</h3>
+              <button type="button" onClick={() => setScriptItem(null)} className="rounded-lg p-1 text-slate-400 hover:bg-white/5 hover:text-white"><X className="h-4 w-4" /></button>
+            </div>
+            <p className="mb-2 text-[11px] text-slate-500">Edit narration, screen labels, requests and points. JSON must keep 6 scenes: hook, problem, mechanism, client_server, rules, cta.</p>
+            <textarea
+              value={scriptText}
+              onChange={(e) => setScriptText(e.target.value)}
+              rows={20}
+              spellCheck={false}
+              className={`${inputClass} font-mono text-[11px] leading-relaxed`}
+            />
+            {scriptError && <p className="mt-2 text-[11px] text-red-400">{scriptError}</p>}
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setScriptItem(null)} className={smallButton}>Cancel</button>
+              <button type="button" disabled={busy === `save-script-${scriptItem.id}`} onClick={() => void saveScript()} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-600 to-violet-600 px-4 py-2 text-xs font-semibold text-white disabled:opacity-60">
+                <Check className="h-3.5 w-3.5" /> Save script
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
