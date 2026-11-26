@@ -196,7 +196,16 @@ export default function SocialPlannerPage() {
     if (item.assetKind === 'video') return !(item.assetPath && item.coverPath);
     return !item.coverPath;
   };
-  const awaitingRender = visibleCalendar.some(needsAssets);
+  const renderActive = (item) => {
+    if (!needsAssets(item)) return false;
+    const soon = new Date();
+    soon.setDate(soon.getDate() + 3);
+    const dueSoon = item.publishDate <= soon.toISOString().slice(0, 10);
+    const started = item.generationStartedAt ? Date.parse(item.generationStartedAt) : 0;
+    const forced = started && Date.now() - started < 2 * 60 * 60 * 1000;
+    return dueSoon || forced;
+  };
+  const awaitingRender = visibleCalendar.some(renderActive);
 
   useEffect(() => {
     if (!awaitingRender) return undefined;
@@ -465,9 +474,15 @@ export default function SocialPlannerPage() {
                           </button>
                         )}
                         {['planned', 'script_ready', 'video_ready'].includes(item.status) && needsAssets(item) && (
-                          <span className={`${smallButton} text-brand-200`} title="The render worker is generating this asset">
-                            <RefreshCw className="h-3 w-3 animate-spin" /> Rendering
-                          </span>
+                          renderActive(item) ? (
+                            <span className={`${smallButton} text-brand-200`} title="The render worker is generating this asset">
+                              <RefreshCw className="h-3 w-3 animate-spin" /> Rendering
+                            </span>
+                          ) : (
+                            <span className={`${smallButton} text-slate-400`} title="Rendering starts 3 days before the publish date">
+                              <CalendarDays className="h-3 w-3" /> Queued
+                            </span>
+                          )
                         )}
                         {['planned', 'script_ready', 'video_ready'].includes(item.status) && !needsAssets(item) && (
                           <button
